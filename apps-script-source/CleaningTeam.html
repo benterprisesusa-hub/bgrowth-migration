@@ -1,0 +1,896 @@
+// ── TEAM ──────────────────────────────────────────────────────────
+var _cpTeamTab = 'members';
+var _cpTeamMembers = [];
+var _cpTeamApps = [];
+var _cpTeamInvites = [];
+
+function cpLoadTeam(){
+  cpTeamSetTab(_cpTeamTab, document.getElementById('cpTeamTab'+_cpTeamTab.charAt(0).toUpperCase()+_cpTeamTab.slice(1)));
+}
+
+// ── PAYROLL ───────────────────────────────────────────────────────
+function cpLoadTeamPayroll(){
+  var now = new Date();
+  var monthStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var el = document.getElementById('cpTeamContent');
+
+  // Render config form primeiro
+  var members = _cpTeamMembers.length ? _cpTeamMembers : ((_cp.settings&&_cp.settings.teamMembers)||[]);
+var payrollCfg = (_cp.settings&&_cp.settings.payroll)||{};
+  
+  el.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'+
+      '<div style="font-size:13px;font-weight:900;color:var(--g1)">⚙️ Payroll Rules</div>'+
+      '<button class="cp-btn cp-btn-ghost cp-btn-sm" onclick="cpTogglePayrollConfig(this)">▼ Configure</button>'+
+    '</div>'+
+    '<div id="cpPayrollConfigWrap" style="display:none;margin-bottom:16px">'+
+      '<div class="cp-card" style="margin-bottom:0"><div id="cpPayrollCfg"></div></div>'+
+    '</div>'+
+    '<div id="cpPayrollSummary"><div class="cp-loader"><span class="cp-spin"></span>Loading...</div></div>';
+
+  cpRenderPayrollSettings(members, payrollCfg);
+
+  // Carrega resumo mensal
+  google.script.run
+    .withSuccessHandler(function(payroll){
+      cpRenderTeamPayroll(payroll||[], monthStr);
+    })
+    .withFailureHandler(function(){
+      cpRenderTeamPayroll([], monthStr);
+    })
+    .cleaning_getPayroll(_cp.user.email, monthStr);
+}
+
+function cpTeamSetTab(tab, btn){
+  _cpTeamTab = tab;
+  document.querySelectorAll('#cpt13 .cp-ptab').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var el = document.getElementById('cpTeamContent');
+  el.innerHTML = '<div class="cp-loader"><span class="cp-spin"></span>Loading...</div>';
+  if(tab==='members') cpLoadTeamMembers();
+  else if(tab==='applications') cpLoadTeamApplications();
+  else if(tab==='invitations') cpLoadTeamInvitations();
+  else if(tab==='payroll') cpLoadTeamPayroll();
+  else if(tab==='workhours') cpTeamRenderWorkHours();
+  else if(tab==='applink') cpTeamRenderAppLink();
+}
+
+// ── MEMBERS ───────────────────────────────────────────────────────
+function cpLoadTeamMembers(){
+  google.script.run
+    .withSuccessHandler(function(members){
+      _cpTeamMembers = (members||[]).map(function(m){
+        if(!m.memberType) m.memberType='fixed';
+        if(!m.status) m.status='Active';
+        if(!m.firstName) m.firstName=(m.name||'').split(' ')[0]||'';
+        if(!m.lastName) m.lastName=(m.name||'').split(' ').slice(1).join(' ')||'';
+        return m;
+      });
+      if(!_cpTeamMembers.length && _cp.settings && _cp.settings.teamMembers && _cp.settings.teamMembers.length){
+        _cpTeamMembers = _cp.settings.teamMembers.map(function(m){
+          return {id:m.email,email:m.email,name:m.name,firstName:(m.name||'').split(' ')[0],lastName:(m.name||'').split(' ').slice(1).join(' '),memberType:'fixed',status:'Active',role:'Cleaner',payType:'percent',payRate:0};
+        });
+      }
+      cpRenderTeamMembers();
+    })
+    .withFailureHandler(function(){
+      // fallback para settings
+      _cpTeamMembers = (_cp.settings&&_cp.settings.teamMembers||[]).map(function(m){
+        return {id:m.email,email:m.email,name:m.name,firstName:(m.name||'').split(' ')[0],lastName:(m.name||'').split(' ').slice(1).join(' '),memberType:'fixed',status:'Active',role:'Cleaner',payType:'percent',payRate:0};
+      });
+      cpRenderTeamMembers();
+    })
+    .cleaning_getMembers(_cp.user.email, null);
+}
+
+function cpRenderTeamMembers(){
+  var el = document.getElementById('cpTeamContent');
+  var fixed = _cpTeamMembers.filter(function(m){ return m.memberType==='fixed'; });
+  var ondemand = _cpTeamMembers.filter(function(m){ return m.memberType==='on-demand'; });
+
+  var html =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'+
+      '<div class="cp-ptabs" style="margin-bottom:0;flex:1">'+
+        '<button class="cp-ptab" id="cpMemTypeFixed" onclick="cpMemFilterType(\'fixed\',this)">Fixed ('+fixed.length+')</button>'+
+        '<button class="cp-ptab" id="cpMemTypeOndemand" onclick="cpMemFilterType(\'on-demand\',this)">On-Demand ('+ondemand.length+')</button>'+
+        '<button class="cp-ptab on" id="cpMemTypeAll" onclick="cpMemFilterType(\'all\',this)">All ('+_cpTeamMembers.length+')</button>'+
+      '</div>'+
+      '<button class="cp-btn cp-btn-teal cp-btn-sm" onclick="cpShowAddMember()">+ Add Member</button>'+
+    '</div>'+
+    '<div id="cpMemAddForm" style="display:none"></div>'+
+    '<div id="cpMemList">'+cpRenderMemberCards(_cpTeamMembers)+'</div>';
+
+  el.innerHTML = html;
+}
+
+var _cpMemTypeFilter = 'fixed';
+function cpMemFilterType(type, btn){
+  _cpMemTypeFilter = type;
+  document.querySelectorAll('[id^="cpMemType"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var filtered = type==='all' ? _cpTeamMembers : _cpTeamMembers.filter(function(m){ return m.memberType===type; });
+  document.getElementById('cpMemList').innerHTML = cpRenderMemberCards(filtered);
+}
+
+function cpRenderMemberCards(members){
+  if(!members.length) return '<div class="cp-empty"><big>👥</big><p>No members yet</p></div>';
+  return members.map(function(m){
+    var statusColor = m.status==='Active'?'var(--green)':m.status==='Inactive'?'var(--red)':'var(--amber)';
+    var initials = ((m.firstName||'').charAt(0)+(m.lastName||'').charAt(0)).toUpperCase()||'?';
+    return '<div class="cp-card" style="margin-bottom:10px">'+
+      '<div style="display:flex;align-items:flex-start;gap:12px">'+
+        '<div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--tl3),var(--tl));display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#fff;flex-shrink:0">'+initials+'</div>'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:14px;font-weight:900;color:var(--g1)">'+m.name+'</div>'+
+            '<span style="font-size:9px;font-weight:800;border-radius:20px;padding:2px 8px;background:'+(m.memberType==='fixed'?'rgba(29,111,164,.12)':'rgba(245,158,11,.12)')+';color:'+(m.memberType==='fixed'?'var(--b3)':'#92400e')+'">'+( m.memberType==='fixed'?'Fixed':'On-Demand')+'</span>'+
+            '<span style="font-size:9px;font-weight:800;border-radius:20px;padding:2px 8px;background:rgba(0,0,0,.05);color:'+statusColor+'">● '+m.status+'</span>'+
+          '</div>'+
+          '<div style="font-size:11px;color:var(--g3);margin-top:3px">'+m.role+(m.email?' · '+m.email:'')+'</div>'+
+          (m.zipcode?'<div style="font-size:11px;color:var(--g3);margin-top:2px">📍 ZIP '+m.zipcode+(m.transportation?' · 🚗 Transport':'')+(m.emergencyJobs?' · ⚡ Emergency':'')+'</div>':'')+
+          '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+            '<button class="cp-btn cp-btn-teal cp-btn-sm" onclick="cpViewMember(\''+m.id+'\')">👁 View</button>'+
+            '<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="cpEditMember(\''+m.id+'\')">✏️ Edit</button>'+
+            (m.memberType==='on-demand'?'<button class="cp-btn cp-btn-blue cp-btn-sm" onclick="cpSendJobOfferToMember(\''+m.email+'\',\''+m.name+'\')">🚨 Send Offer</button>':'') +
+            (m.memberType==='on-demand'?'<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="cpConvertToFixed(\''+m.id+'\',\''+m.name+'\')">⬆️ Convert</button>':'')+
+            (m.memberType==='fixed'&&m.inviteStatus==='pending'?'<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="cpResendInvite(\''+m.id+'\')">📧 Resend Invite</button>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function cpShowAddMember(){
+  var el = document.getElementById('cpMemAddForm');
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+  if(el.style.display==='none') return;
+  el.innerHTML =
+    '<div class="cp-card" style="margin-bottom:12px;border-left:3px solid var(--tl)">'+
+      '<div class="cp-sec" style="margin-top:0">➕ Add Member</div>'+
+      '<div class="cp-ptabs" style="margin-bottom:12px">'+
+        '<button class="cp-ptab on" id="cpAddMemTypeFixed" onclick="cpSetAddMemType(\'fixed\',this)">Fixed Member</button>'+
+        '<button class="cp-ptab" id="cpAddMemTypeOndemand" onclick="cpSetAddMemType(\'on-demand\',this)">On-Demand</button>'+
+      '</div>'+
+      '<input type="hidden" id="cpAddMemType" value="fixed">'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">First Name *</label><input type="text" id="cpAddMemFirst" class="cp-inp" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Last Name *</label><input type="text" id="cpAddMemLast" class="cp-inp" style="margin-bottom:0"></div>'+
+      '</div>'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Email *</label><input type="email" id="cpAddMemEmail" class="cp-inp" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Phone *</label><input type="tel" id="cpAddMemPhone" class="cp-inp" inputmode="tel" style="margin-bottom:0"></div>'+
+      '</div>'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">ZIP Code *</label><input type="text" id="cpAddMemZip" class="cp-inp" placeholder="33101" inputmode="numeric" maxlength="10" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px" id="cpAddMemRoleWrap"><label class="cp-lbl">Role</label><select id="cpAddMemRole" class="cp-inp" style="margin-bottom:0"><option value="Cleaner">Cleaner</option><option value="Supervisor">Supervisor</option><option value="Manager">Manager</option></select></div>'+
+      '</div>'+
+      '<div id="cpAddMemFixedFields">'+
+  '<div class="cp-r2" style="margin-bottom:0">'+
+    '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Pay Type</label><select id="cpAddMemPayType" class="cp-inp" style="margin-bottom:0"><option value="percent">% of Job</option><option value="hourly">Hourly ($)</option><option value="fixed_job">Fixed per Job</option></select></div>'+
+    '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Pay Rate</label><input type="number" id="cpAddMemPayRate" class="cp-inp" placeholder="0" step="0.01" inputmode="decimal" style="margin-bottom:0"></div>'+
+  '</div>'+
+  '<div class="cp-r2" style="margin-bottom:12px">'+
+    '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--g6);border-radius:8px">'+
+      '<span style="font-size:12px;font-weight:700;flex:1">🚗 Transportation</span>'+
+      '<div class="ob-switch" id="cpAddFixedTransSwitch" onclick="this.classList.toggle(\'on\')"><div class="ob-switch-dot"></div></div>'+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--g6);border-radius:8px">'+
+      '<span style="font-size:12px;font-weight:700;flex:1">⚡ Emergency Jobs</span>'+
+      '<div class="ob-switch" id="cpAddFixedEmergSwitch" onclick="this.classList.toggle(\'on\')"><div class="ob-switch-dot"></div></div>'+
+    '</div>'+
+  '</div>'+
+'</div>'+
+      '<div id="cpAddMemOndemandFields" style="display:none">'+
+        '<div class="cp-r2" style="margin-bottom:12px">'+
+          '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--g6);border-radius:8px">'+
+            '<span style="font-size:12px;font-weight:700;flex:1">🚗 Transportation</span>'+
+            '<div class="ob-switch" id="cpAddMemTransSwitch" onclick="this.classList.toggle(\'on\')"><div class="ob-switch-dot"></div></div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--g6);border-radius:8px">'+
+            '<span style="font-size:12px;font-weight:700;flex:1">⚡ Emergency Jobs</span>'+
+            '<div class="ob-switch" id="cpAddMemEmergSwitch" onclick="this.classList.toggle(\'on\')"><div class="ob-switch-dot"></div></div>'+
+          '</div>'+
+        '</div>'+
+        '<label class="cp-lbl">Max Distance (miles)</label>'+
+        '<input type="number" id="cpAddMemMaxDist" class="cp-inp" placeholder="15" value="15" inputmode="numeric">'+
+      '</div>'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<button class="cp-btn cp-btn-gray" onclick="document.getElementById(\'cpMemAddForm\').style.display=\'none\'">Cancel</button>'+
+        '<button class="cp-btn cp-btn-teal" onclick="cpSaveMember()">💾 Save & '+'<span id="cpAddMemBtnLabel">Send Invite</span></button>'+
+      '</div>'+
+    '</div>';
+}
+
+function cpSetAddMemType(type, btn){
+  document.getElementById('cpAddMemType').value = type;
+  document.querySelectorAll('[id^="cpAddMemType"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  document.getElementById('cpAddMemFixedFields').style.display = type==='fixed'?'block':'none';
+  document.getElementById('cpAddMemOndemandFields').style.display = type==='on-demand'?'block':'none';
+  document.getElementById('cpAddMemBtnLabel').textContent = type==='fixed'?'Send Invite':'Add to Pool';
+}
+
+function cpSaveMember(){
+  var type = document.getElementById('cpAddMemType').value;
+  var first = document.getElementById('cpAddMemFirst').value.trim();
+  var last = document.getElementById('cpAddMemLast').value.trim();
+  var email = document.getElementById('cpAddMemEmail').value.trim();
+  var phone = document.getElementById('cpAddMemPhone').value.trim();
+  var zip = document.getElementById('cpAddMemZip').value.trim();
+  if(!first){ toast('Enter first name','err'); return; }
+  if(!last){ toast('Enter last name','err'); return; }
+  if(!email||email.indexOf('@')<0){ toast('Enter valid email','err'); return; }
+  if(!phone){ toast('Enter phone','err'); return; }
+  if(!zip){ toast('Enter ZIP code','err'); return; }
+
+  var data = {
+    memberType: type,
+    firstName: first,
+    lastName: last,
+    email: email,
+    phone: phone,
+    zipcode: zip,
+    role: document.getElementById('cpAddMemRole').value,
+    payType: type==='fixed'?(document.getElementById('cpAddMemPayType').value||'percent'):'percent',
+    payRate: type==='fixed'?(parseFloat(document.getElementById('cpAddMemPayRate').value)||0):0,
+    transportation: type==='fixed'
+  ? document.getElementById('cpAddFixedTransSwitch').classList.contains('on')
+  : document.getElementById('cpAddMemTransSwitch').classList.contains('on'),
+emergencyJobs: type==='fixed'
+  ? document.getElementById('cpAddFixedEmergSwitch').classList.contains('on')
+  : document.getElementById('cpAddMemEmergSwitch').classList.contains('on'),
+    maxDistance: type==='on-demand'?(parseFloat(document.getElementById('cpAddMemMaxDist').value)||15):50
+  };
+
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.ok){
+        toast(type==='fixed'?'Member added — invite sent ✓':'Worker added to pool ✓');
+        document.getElementById('cpMemAddForm').style.display='none';
+        cpLoadTeamMembers();
+      } else toast((r&&r.message)||'Error','err');
+    })
+    .cleaning_addMember(_cp.user.email, data);
+}
+
+function cpViewMember(id){
+  var m = _cpTeamMembers.find(function(x){ return String(x.id)===String(id); });
+  if(!m) return;
+  var initials = ((m.firstName||'').charAt(0)+(m.lastName||'').charAt(0)).toUpperCase()||'?';
+
+var modal = document.createElement('div');
+  modal.id = 'cpMemberModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+  modal.setAttribute('data-member-email', m.email);
+
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:16px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto">'+
+
+      // Header fixo
+      '<div style="background:linear-gradient(135deg,var(--b1),var(--b3));border-radius:16px 16px 0 0;padding:20px 24px;color:#fff;display:flex;align-items:center;gap:14px">'+
+        '<div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;flex-shrink:0">'+initials+'</div>'+
+        '<div style="flex:1">'+
+          '<div style="font-size:16px;font-weight:900">'+m.name+'</div>'+
+          '<div style="font-size:11px;opacity:.75;margin-top:2px">'+m.role+
+            ' · <span style="font-size:9px;font-weight:800;background:rgba(255,255,255,.2);border-radius:20px;padding:2px 8px">'+(m.memberType==='fixed'?'Fixed':'On-Demand')+'</span>'+
+          '</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'cpMemberModal\').remove()" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:16px;color:#fff;font-family:Nunito,sans-serif">✕</button>'+
+      '</div>'+
+
+      // Tabs
+      '<div style="display:flex;border-bottom:2px solid var(--g5);background:var(--g6)">'+
+        '<button class="cp-ptab on" id="cmTab0" onclick="cmSetTab(0,this)" style="flex:1;border-radius:0">📋 Info</button>'+
+        '<button class="cp-ptab" id="cmTab1" onclick="cmSetTab(1,this)" style="flex:1;border-radius:0">🕐 Hours</button>'+
+        '<button class="cp-ptab" id="cmTab2" onclick="cmSetTab(2,this)" style="flex:1;border-radius:0">📆 Days Off</button>'+
+        '<button class="cp-ptab" id="cmTab3" onclick="cmSetTab(3,this)" style="flex:1;border-radius:0">📊 Stats</button>'+
+      '</div>'+
+
+      // Tab 0 — Info
+      '<div id="cmTc0" style="padding:20px">'+
+        '<div style="display:flex;flex-direction:column;gap:0;margin-bottom:16px">'+
+          _cmInfoRow('📧 Email', m.email||'—')+
+          _cmInfoRow('📱 Phone', m.phone||'—')+
+          _cmInfoRow('📍 ZIP', m.zipcode||'—')+
+          _cmInfoRow('💼 Role', m.role||'—')+
+          _cmInfoRow('● Status', m.status||'—')+
+          (m.memberType==='fixed'?_cmInfoRow('💵 Pay', m.payType+' · '+m.payRate+(m.payType==='percent'?'%':'')):'')+
+          (m.memberType==='on-demand'?_cmInfoRow('🚗 Transport', m.transportation?'Yes':'No'):'')+
+          (m.memberType==='on-demand'?_cmInfoRow('⚡ Emergency', m.emergencyJobs?'Yes':'No'):'')+
+          (m.memberType==='on-demand'?_cmInfoRow('📏 Max Distance', (m.maxDistance||15)+' mi'):'')+
+          (m.notes?_cmInfoRow('📝 Notes', m.notes):'')+
+        '</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="document.getElementById(\'cpMemberModal\').remove();cpEditMember(\''+m.id+'\')">✏️ Edit</button>'+
+          (m.memberType==='on-demand'?'<button class="cp-btn cp-btn-blue cp-btn-sm" onclick="cpConvertToFixed(\''+m.id+'\',\''+m.name+'\');document.getElementById(\'cpMemberModal\').remove()">⬆️ Convert to Fixed</button>':'')+
+          (m.memberType==='fixed'&&m.inviteStatus==='pending'?'<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="cpResendInvite(\''+m.id+'\')">📧 Resend Invite</button>':'')+
+          '<button class="cp-btn cp-btn-red cp-btn-sm" onclick="cpDeactivateMember(\''+m.id+'\',\''+m.name+'\');document.getElementById(\'cpMemberModal\').remove()">🚫 Deactivate</button>'+
+        '</div>'+
+      '</div>'+
+
+      // Tab 1 — Work Hours
+      '<div id="cmTc1" style="display:none;padding:20px">'+
+        '<div style="font-size:11px;color:var(--g3);margin-bottom:16px;line-height:1.6">Set the regular working hours for <b>'+m.name.split(' ')[0]+'</b>. These define which time slots are available for scheduling.</div>'+
+        '<div style="background:var(--tl5);border:1px solid var(--tl4);border-radius:10px;padding:16px;margin-bottom:16px">'+
+          '<div style="font-size:11px;font-weight:800;color:var(--b3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">🕐 Regular Hours</div>'+
+          '<div class="cp-r2" style="margin-bottom:0">'+
+            '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">Start Time</label><input type="time" id="cmWhStart" class="cp-inp cp-inp-sm" value="'+(m.workHours&&m.workHours.start?m.workHours.start:'08:00')+'" style="margin-bottom:0"></div>'+
+            '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">End Time</label><input type="time" id="cmWhEnd" class="cp-inp cp-inp-sm" value="'+(m.workHours&&m.workHours.end?m.workHours.end:'18:00')+'" style="margin-bottom:0"></div>'+
+          '</div>'+
+        '</div>'+
+        '<button class="cp-btn cp-btn-teal" onclick="cmSaveWorkHours(\''+m.email+'\')">💾 Save Work Hours</button>'+
+      '</div>'+
+
+      // Tab 2 — Blocked Days
+      '<div id="cmTc2" style="display:none;padding:20px">'+
+        '<div style="font-size:11px;color:var(--g3);margin-bottom:14px;line-height:1.6">Add days off, vacations or extra available hours for <b>'+m.name.split(' ')[0]+'</b>.</div>'+
+
+        // Add new
+        '<div style="background:var(--g6);border-radius:10px;padding:14px;margin-bottom:16px">'+
+          '<div style="font-size:11px;font-weight:800;color:var(--g2);margin-bottom:10px">➕ Add Rule</div>'+
+          '<div class="cp-grp" style="margin-bottom:8px"><label class="cp-lbl">Type</label>'+
+          '<select id="cmSpType" class="cp-inp cp-inp-sm" style="margin-bottom:0" onchange="cmToggleSpFields(this)">'+
+          '<option value="Off">🚫 Full Day Off</option>'+
+          '<option value="Partial">⏰ Partial Block (lunch, etc)</option>'+
+          '<option value="Vacation">🏖️ Vacation (period)</option>'+
+          '<option value="Extra">➕ Extra Hours</option>'+
+          '</select>'+
+          '</div>'+
+      // Data única (Off, Extra)
+'<div id="cmSpSingleDate" class="cp-grp" style="margin-bottom:8px"><label class="cp-lbl">Date</label><input type="date" id="cmSpDate" class="cp-inp cp-inp-sm" style="margin-bottom:0"></div>'+
+// Período para Partial (datas + horário recorrente)
+'<div id="cmSpPartialPeriod" style="display:none;margin-bottom:8px" class="cp-r2">'+
+  '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">From Date</label><input type="date" id="cmSpPartialFrom" class="cp-inp cp-inp-sm" style="margin-bottom:0"></div>'+
+  '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">To Date</label><input type="date" id="cmSpPartialTo" class="cp-inp cp-inp-sm" style="margin-bottom:0"></div>'+
+'</div>'+
+        // Período (Vacation)
+          '<div id="cmSpPeriod" style="display:none" class="cp-r2" style="margin-bottom:8px">'+
+          '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">From</label><input type="date" id="cmSpDateFrom" class="cp-inp cp-inp-sm" style="margin-bottom:0"></div>'+
+          '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">To</label><input type="date" id="cmSpDateTo" class="cp-inp cp-inp-sm" style="margin-bottom:0"></div>'+
+          '</div>'+
+        // Horário (Partial e Extra)
+          '<div id="cmSpTimeWrap" style="display:none;margin-bottom:8px" class="cp-r2">'+
+          '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">Start</label><input type="time" id="cmSpStart" class="cp-inp cp-inp-sm" value="12:00" style="margin-bottom:0"></div>'+
+          '<div class="cp-grp" style="margin-bottom:0"><label class="cp-lbl">End</label><input type="time" id="cmSpEnd" class="cp-inp cp-inp-sm" value="13:00" style="margin-bottom:0"></div>'+
+          '</div>'+
+          '<button class="cp-btn cp-btn-teal" onclick="cmAddSpecial(\''+m.email+'\')">+ Add</button>'+
+        // List 
+        '<div id="cmSpList"><div class="cp-loader"><span class="cp-spin"></span>Loading...</div></div>'+
+      '</div>'+
+
+      // Tab 3 — Stats
+      '<div id="cmTab3" style="display:none;padding:20px">'+
+        '<div class="cp-loader"><span class="cp-spin"></span>Loading stats...</div>'+
+      '</div>'+
+
+    '</div>';
+
+  document.body.appendChild(modal);
+
+  // Carrega blocked days e performance em background
+cmLoadSpecial(m.email);
+}
+
+function _cmInfoRow(lbl, val){
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--g6);font-size:12px">'+
+    '<span style="color:var(--g3);font-weight:600">'+lbl+'</span>'+
+    '<span style="font-weight:800;color:var(--g1);text-align:right;max-width:60%">'+val+'</span>'+
+  '</div>';
+}
+
+function cmSetTab(idx, btn){
+  [0,1,2,3].forEach(function(i){
+    var tc=document.getElementById('cmTc'+i);
+    var tb=document.getElementById('cmTab'+i);
+    if(tc)tc.style.display=i===idx?'block':'none';
+    if(tb)tb.classList.toggle('on',i===idx);
+  });
+  // Carrega performance quando abre tab 3
+  if(idx===3){
+    var perf=document.getElementById('cmTc3');
+    if(perf&&perf.innerHTML.indexOf('cp-spin')>-1){
+      var modal=document.getElementById('cpMemberModal');
+      if(modal){
+        var emailAttr=modal.getAttribute('data-member-email');
+        if(emailAttr) cmLoadPerformance(emailAttr);
+      }
+    }
+  }
+}
+
+function cmSaveWorkHours(memberEmail){
+  var start=document.getElementById('cmWhStart').value;
+  var end=document.getElementById('cmWhEnd').value;
+  if(!start||!end){toast('Enter start and end time','err');return;}
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.ok) toast('Work hours saved ✓');
+      else toast((r&&r.message)||'Error','err');
+    })
+    .cleaning_saveMemberWorkHours(_cp.user.email, memberEmail, start, end);
+}
+
+function cmToggleSpFields(sel){
+  var type = sel.value;
+  document.getElementById('cmSpSingleDate').style.display = (type==='Off'||type==='Extra')?'block':'none';
+  document.getElementById('cmSpPeriod').style.display = type==='Vacation'?'grid':'none';
+  document.getElementById('cmSpPartialPeriod').style.display = type==='Partial'?'grid':'none';
+  document.getElementById('cmSpTimeWrap').style.display = (type==='Partial'||type==='Extra')?'grid':'none';
+  if(type==='Partial'){ document.getElementById('cmSpStart').value='12:00'; document.getElementById('cmSpEnd').value='13:00'; }
+  if(type==='Extra'){ document.getElementById('cmSpStart').value='08:00'; document.getElementById('cmSpEnd').value='12:00'; }
+}
+
+function cmAddSpecial(memberEmail){
+  var type = document.getElementById('cmSpType').value;
+  if(type==='Vacation'){
+  var vFrom = document.getElementById('cmSpDateFrom').value;
+  var vTo   = document.getElementById('cmSpDateTo').value;
+  if(!vFrom||!vTo){toast('Select start and end date','err');return;}
+  if(vFrom>vTo){toast('End date must be after start date','err');return;}
+
+  var vDates=[];
+  var vd=new Date(vFrom+'T12:00:00');
+  var vdEnd=new Date(vTo+'T12:00:00');
+  while(vd<=vdEnd){
+    vDates.push(vd.toISOString().slice(0,10));
+    vd.setDate(vd.getDate()+1);
+  }
+
+  function saveVacNext(idx){
+    if(idx>=vDates.length){
+      toast('Vacation added ✓');
+      cmLoadSpecial(memberEmail);
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function(r){
+        if(r&&r.ok) saveVacNext(idx+1);
+        else toast((r&&r.message)||'Error','err');
+      })
+      .cleaning_addSpecialHours(_cp.user.email,{
+        memberEmail:memberEmail,
+        date:vDates[idx],
+        start:'',end:'',type:'Off'
+      });
+  }
+  saveVacNext(0);
+  return;
+}
+
+  if(type==='Partial'){
+  var pFrom = document.getElementById('cmSpPartialFrom').value;
+  var pTo   = document.getElementById('cmSpPartialTo').value;
+  var pStart= document.getElementById('cmSpStart').value;
+  var pEnd  = document.getElementById('cmSpEnd').value;
+  if(!pFrom||!pTo){toast('Select date range','err');return;}
+  if(pFrom>pTo){toast('End date must be after start date','err');return;}
+  if(!pStart||!pEnd){toast('Enter time range','err');return;}
+  if(pStart>=pEnd){toast('End time must be after start time','err');return;}
+
+  var dates=[];
+  var pd=new Date(pFrom+'T12:00:00');
+  var pdEnd=new Date(pTo+'T12:00:00');
+  while(pd<=pdEnd){
+    dates.push(pd.toISOString().slice(0,10));
+    pd.setDate(pd.getDate()+1);
+  }
+
+  function saveNext(idx){
+    if(idx>=dates.length){
+      toast('Partial block added ✓');
+      cmLoadSpecial(memberEmail);
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function(r){
+        if(r&&r.ok) saveNext(idx+1);
+        else toast((r&&r.message)||'Error','err');
+      })
+      .cleaning_addSpecialHours(_cp.user.email,{
+        memberEmail:memberEmail,
+        date:dates[idx],
+        start:pStart,
+        end:pEnd,
+        type:'Partial'
+      });
+  }
+  saveNext(0);
+  return;
+}
+
+  if(type==='Extra'){
+    var eDate  = document.getElementById('cmSpDate').value;
+    var eStart = document.getElementById('cmSpStart').value;
+    var eEnd   = document.getElementById('cmSpEnd').value;
+    if(!eDate){toast('Select a date','err');return;}
+    if(!eStart||!eEnd){toast('Enter time range','err');return;}
+    if(eStart>=eEnd){toast('End time must be after start time','err');return;}
+    google.script.run.withSuccessHandler(function(r){
+      if(r&&r.ok){toast('Extra hours added ✓');cmLoadSpecial(memberEmail);}
+      else toast((r&&r.message)||'Error','err');
+    }).cleaning_addSpecialHours(_cp.user.email,{memberEmail:memberEmail,date:eDate,start:eStart,end:eEnd,type:'Extra'});
+    return;
+  }
+
+  var oDate = document.getElementById('cmSpDate').value;
+  if(!oDate){toast('Select a date','err');return;}
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){toast('Day off added ✓');cmLoadSpecial(memberEmail);}
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_addSpecialHours(_cp.user.email,{memberEmail:memberEmail,date:oDate,start:'',end:'',type:'Off'});
+}
+
+function cmLoadSpecial(memberEmail){
+  google.script.run
+    .withSuccessHandler(function(list){
+      var el=document.getElementById('cmSpList');
+      if(!el)return;
+      var today = new Date().toISOString().slice(0,10);
+      var limitDate = new Date();
+      limitDate.setDate(limitDate.getDate()+30);
+      var limitStr = limitDate.toISOString().slice(0,10);
+
+      var mine=(list||[]).filter(function(r){
+        return String(r.memberEmail||'').toLowerCase().trim()===String(memberEmail||'').toLowerCase().trim()
+          && r.date >= today
+          && r.date <= limitStr;
+      }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+      if(!mine.length){
+        el.innerHTML='<div style="text-align:center;color:var(--g4);font-size:12px;padding:12px">No rules added yet.</div>';
+        return;
+      }
+      var typeColors={'Off':'var(--red)','Partial':'var(--amber)','Extra':'var(--green)','Vacation':'var(--purple)'};
+      var typeLabels={'Off':'🚫 Day Off','Partial':'⏰ Partial Block','Extra':'➕ Extra Hours','Vacation':'🏖️ Vacation'};
+      el.innerHTML=mine.map(function(r){
+        var color=typeColors[r.type]||'var(--g4)';
+        var label=typeLabels[r.type]||r.type;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--g6);border-radius:8px;margin-bottom:6px;border-left:3px solid '+color+'">'+
+          '<div style="flex:1">'+
+            '<div style="font-size:12px;font-weight:800;color:var(--g1)">'+r.date+'</div>'+
+            '<div style="font-size:10px;font-weight:700;color:'+color+'">'+label+(r.start&&r.end?' · '+r.start+' - '+r.end:'')+'</div>'+
+          '</div>'+
+          '<button onclick="cmDeleteSpecial(\''+r.id+'\',\''+memberEmail+'\')" style="background:#fee2e2;border:none;border-radius:7px;padding:4px 8px;cursor:pointer;font-size:11px;color:#dc2626;font-weight:800;font-family:Nunito,sans-serif">🗑</button>'+
+        '</div>';
+      }).join('');
+    })
+    .withFailureHandler(function(e){
+      var el=document.getElementById('cmSpList');
+      if(el)el.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px">Error: '+e.message+'</div>';
+    })
+    .cleaning_getSpecialHours(_cp.user.email);
+}
+
+function cmDeleteSpecial(id, memberEmail){
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.ok){toast('Rule deleted');cmLoadSpecial(memberEmail);}
+      else toast((r&&r.message)||'Error','err');
+    })
+    .cleaning_deleteSpecialHour(_cp.user.email, id);
+}
+
+function cmLoadPerformance(memberEmail){
+  google.script.run
+    .withSuccessHandler(function(perf){
+      var el=document.getElementById('cmTc3');
+      if(!el)return;
+      if(!perf||!perf.ok){
+        el.innerHTML='<div style="text-align:center;color:var(--g4);font-size:12px;padding:20px">No data yet.</div>';
+        return;
+      }
+      el.innerHTML=
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'+
+          '<div class="cp-stat"><div class="cp-stat-v tl">'+perf.totalJobs+'</div><div class="cp-stat-l">Total Jobs</div></div>'+
+          '<div class="cp-stat"><div class="cp-stat-v am">'+perf.totalHours+'h</div><div class="cp-stat-l">Hours</div></div>'+
+          '<div class="cp-stat"><div class="cp-stat-v gr">$'+perf.totalRevenue.toFixed(0)+'</div><div class="cp-stat-l">Revenue</div></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'+
+          '<div class="cp-stat"><div class="cp-stat-v">'+perf.monthJobs+'</div><div class="cp-stat-l">This Month</div></div>'+
+          '<div class="cp-stat"><div class="cp-stat-v rd">'+perf.cancelRate+'%</div><div class="cp-stat-l">Cancel Rate</div></div>'+
+        '</div>'+
+        '<div style="background:var(--g6);border-radius:10px;padding:12px">'+
+          '<div style="font-size:10px;font-weight:800;color:var(--g3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">This Month</div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--g5)"><span style="color:var(--g3)">Jobs</span><b>'+perf.monthJobs+'</b></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0"><span style="color:var(--g3)">Revenue</span><b style="color:var(--tl)">$'+perf.monthRevenue.toFixed(2)+'</b></div>'+
+        '</div>';
+    })
+    .cleaning_getMemberPerformance(_cp.user.email, memberEmail);
+}
+
+function cpEditMember(id){
+  var m = _cpTeamMembers.find(function(x){ return String(x.id)===String(id); });
+  if(!m) return;
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:400px;max-height:90vh;overflow-y:auto">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:15px;font-weight:900">✏️ Edit — '+m.name+'</div>'+
+        '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--g5);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-family:Nunito,sans-serif">✕</button>'+
+      '</div>'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">First Name</label><input type="text" id="cpEditMemFirst" class="cp-inp" value="'+m.firstName+'" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Last Name</label><input type="text" id="cpEditMemLast" class="cp-inp" value="'+m.lastName+'" style="margin-bottom:0"></div>'+
+      '</div>'+
+      '<label class="cp-lbl">Phone</label><input type="tel" id="cpEditMemPhone" class="cp-inp" value="'+(m.phone||'')+'">'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">ZIP</label><input type="text" id="cpEditMemZip" class="cp-inp" value="'+(m.zipcode||'')+'" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Status</label><select id="cpEditMemStatus" class="cp-inp" style="margin-bottom:0"><option'+(m.status==='Active'?' selected':'')+'>Active</option><option'+(m.status==='Vacation'?' selected':'')+'>Vacation</option><option'+(m.status==='Inactive'?' selected':'')+'>Inactive</option></select></div>'+
+      '</div>'+
+      '<label class="cp-lbl">Role</label>'+
+      '<select id="cpEditMemRole" class="cp-inp">'+
+        '<option'+(m.role==='Cleaner'?' selected':'')+'>Cleaner</option>'+
+        '<option'+(m.role==='Supervisor'?' selected':'')+'>Supervisor</option>'+
+        '<option'+(m.role==='Manager'?' selected':'')+'>Manager</option>'+
+      '</select>'+
+      (m.memberType==='fixed'?
+        '<div class="cp-r2" style="margin-bottom:0">'+
+          '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Pay Type</label><select id="cpEditMemPayType" class="cp-inp" style="margin-bottom:0"><option value="percent"'+(m.payType==='percent'?' selected':'')+'>% of Job</option><option value="hourly"'+(m.payType==='hourly'?' selected':'')+'>Hourly</option><option value="fixed_job"'+(m.payType==='fixed_job'?' selected':'')+'>Fixed/Job</option></select></div>'+
+          '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Pay Rate</label><input type="number" id="cpEditMemPayRate" class="cp-inp" value="'+(m.payRate||0)+'" style="margin-bottom:0"></div>'+
+        '</div>':
+        '<div class="cp-r2" style="margin-bottom:0">'+
+          '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Max Distance</label><input type="number" id="cpEditMemMaxDist" class="cp-inp" value="'+(m.maxDistance||15)+'" style="margin-bottom:0"></div>'+
+        '</div>')+
+      '<label class="cp-lbl">Notes</label><input type="text" id="cpEditMemNotes" class="cp-inp" value="'+(m.notes||'')+'">'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<button class="cp-btn cp-btn-gray" onclick="this.closest(\'[style*=fixed]\').remove()">Cancel</button>'+
+        '<button class="cp-btn cp-btn-teal" onclick="cpUpdateMember(\''+m.id+'\',\''+m.memberType+'\',this.closest(\'[style*=fixed]\'))">💾 Save</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function cpUpdateMember(id, type, modal){
+  var data = {
+    firstName: document.getElementById('cpEditMemFirst').value.trim(),
+    lastName: document.getElementById('cpEditMemLast').value.trim(),
+    phone: document.getElementById('cpEditMemPhone').value.trim(),
+    zipcode: document.getElementById('cpEditMemZip').value.trim(),
+    status: document.getElementById('cpEditMemStatus').value,
+    role: document.getElementById('cpEditMemRole').value,
+    notes: document.getElementById('cpEditMemNotes').value.trim(),
+    payType: type==='fixed'?document.getElementById('cpEditMemPayType').value:'percent',
+    payRate: type==='fixed'?parseFloat(document.getElementById('cpEditMemPayRate').value)||0:0,
+    maxDistance: type==='on-demand'?parseFloat(document.getElementById('cpEditMemMaxDist').value)||15:50
+  };
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){ toast('Member updated ✓'); if(modal)modal.remove(); cpLoadTeamMembers(); }
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_updateMember(_cp.user.email, id, data);
+}
+
+function cpConvertToFixed(id, name){
+  if(!confirm('Convert '+name+' to Fixed Member? An invite will be sent.')) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){ toast('Converted — invite sent ✓'); cpLoadTeamMembers(); }
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_convertToFixed(_cp.user.email, id);
+}
+
+function cpDeactivateMember(id, name){
+  if(!confirm('Deactivate '+name+'?')) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){ toast('Member deactivated'); cpLoadTeamMembers(); }
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_deleteMember(_cp.user.email, id);
+}
+
+function cpResendInvite(id){
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok) toast('Invite resent ✓');
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_resendInvite(_cp.user.email, id);
+}
+
+function cpSendJobOfferToMember(email, name){
+  cpGoTab(11, document.getElementById('cpn11'));
+  setTimeout(function(){ cpJoShowForm(); }, 300);
+  toast('Opening Job Offer for '+name);
+}
+
+// ── APPLICATIONS ──────────────────────────────────────────────────
+function cpLoadTeamApplications(){
+  google.script.run
+    .withSuccessHandler(function(apps){
+      _cpTeamApps = apps || [];
+      cpRenderTeamApplications();
+    })
+    .cleaning_getTeamApplications(_cp.user.email);
+}
+
+function cpRenderTeamApplications(){
+  var el = document.getElementById('cpTeamContent');
+  if(!_cpTeamApps.length){
+    el.innerHTML = '<div class="cp-empty"><big>📋</big><p>No applications yet</p><small>Share your application link in Settings > Links & Offers</small></div>';
+    return;
+  }
+  el.innerHTML = _cpTeamApps.map(function(a){
+    return '<div class="cp-card" style="margin-bottom:10px">'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'+
+        '<div style="flex:1">'+
+          '<div style="font-size:14px;font-weight:900;color:var(--g1)">'+a.name+'</div>'+
+          '<div style="font-size:11px;color:var(--g3);margin-top:3px">'+a.email+' · '+(a.phone||'—')+'</div>'+
+          (a.availability?'<div style="font-size:11px;color:var(--g3);margin-top:2px">🕐 '+a.availability+'</div>':'')+
+          (a.message?'<div style="font-size:12px;color:var(--g2);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:var(--g3)">Message:</span> '+a.message+'</div>':'')+
+          '<div style="font-size:10px;color:var(--g4);margin-top:4px">Submitted: '+String(a.createdAt).slice(0,16)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="cp-btn cp-btn-teal cp-btn-sm" onclick="cpApproveApplication(\''+a.id+'\')">✓ Approve</button>'+
+        '<button class="cp-btn cp-btn-red cp-btn-sm" onclick="cpRejectApplication(\''+a.id+'\')">✕ Reject</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function cpApproveApplication(id, name){
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){ toast(name+' approved ✓'); cpLoadTeamApplications(); }
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_approveApplication(_cp.user.email, id);
+}
+
+function cpRejectApplication(id, name){
+  if(!confirm('Reject application from '+name+'?')) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){ toast('Application rejected'); cpLoadTeamApplications(); }
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_rejectApplication(_cp.user.email, id);
+}
+
+// ── INVITATIONS ───────────────────────────────────────────────────
+function cpLoadTeamInvitations(){
+  google.script.run
+    .withSuccessHandler(function(invites){
+      _cpTeamInvites = invites || [];
+      cpRenderTeamInvitations();
+    })
+    .cleaning_getInvitations(_cp.user.email);
+}
+
+function cpRenderTeamInvitations(){
+  var el = document.getElementById('cpTeamContent');
+  if(!_cpTeamInvites.length){
+    el.innerHTML = '<div class="cp-empty"><big>✉️</big><p>No invitations sent yet</p></div>';
+    return;
+  }
+  el.innerHTML = _cpTeamInvites.map(function(inv){
+    var stColor = inv.status==='completed'?'var(--green)':inv.status==='pending'?'var(--amber)':'var(--g4)';
+    var stLabel = inv.status==='completed'?'Completed':inv.status==='pending'?'Pending':'—';
+    return '<div class="cp-card" style="margin-bottom:8px;border-left:3px solid '+stColor+'">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:800;color:var(--g1)">'+inv.memberName+'</div>'+
+          '<div style="font-size:11px;color:var(--g3)">'+inv.memberEmail+'</div>'+
+          '<div style="font-size:10px;color:var(--g3);margin-top:3px">Sent: '+String(inv.sentAt).slice(0,16)+(inv.completedAt?' · Completed: '+String(inv.completedAt).slice(0,16):'')+'</div>'+
+        '</div>'+
+        '<span style="font-size:10px;font-weight:800;border-radius:20px;padding:3px 10px;background:var(--g6);color:'+stColor+'">'+stLabel+'</span>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function cpTogglePayrollConfig(btn){
+  var wrap = document.getElementById('cpPayrollConfigWrap');
+  var isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  btn.textContent = isOpen ? '▼ Configure' : '▲ Configure';
+}
+
+function cpTeamRenderWorkHours(){
+  var el=document.getElementById('cpTeamContent');
+  if(!el)return;
+  var wh=(_cp.settings&&_cp.settings.workHours)||{};
+  var members=(_cp.settings&&_cp.settings.teamMembers)||[];
+  el.innerHTML=
+    '<div class="cp-sec" style="margin-top:0">🕐 Work Hours</div>'+
+    '<div class="cp-card"><div id="cpWorkHrs"></div></div>'+
+    '<div class="cp-sec">📆 Special Days</div>'+
+    '<div class="cp-card">'+
+      '<div id="cpSpMemWrap" style="display:none;margin-bottom:10px"><label class="cp-lbl">For Member</label><select id="cpSpMem" class="cp-inp"></select></div>'+
+      '<div class="cp-r3" style="margin-bottom:0">'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Date</label><input type="date" id="cpExtDate" class="cp-inp" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">Start</label><input type="time" id="cpExtStart" class="cp-inp" style="margin-bottom:0"></div>'+
+        '<div class="cp-grp" style="margin-bottom:12px"><label class="cp-lbl">End</label><input type="time" id="cpExtEnd" class="cp-inp" style="margin-bottom:0"></div>'+
+      '</div>'+
+      '<div class="cp-r2" style="margin-bottom:12px">'+
+        '<button class="cp-btn cp-btn-teal" onclick="cpAddExtra()">+ Extra Hours</button>'+
+        '<button class="cp-btn cp-btn-red" onclick="cpBlockDay()">🚫 Block Day</button>'+
+      '</div>'+
+      '<div class="cp-sec" style="margin-top:0">Rules</div>'+
+      '<div id="cpSpList"></div>'+
+    '</div>';
+  cpRenderWorkHoursSettings(wh, members);
+  cpRenderSpMemSel(members);
+  cpLoadSpecials();
+}
+
+function cpTeamRenderAppLink(){
+  var el=document.getElementById('cpTeamContent');
+  if(!el)return;
+  var link=cpGetApplyLink();
+  el.innerHTML=
+    '<div class="cp-sec" style="margin-top:0">👥 Team Application Link</div>'+
+    '<div class="cp-card">'+
+      '<div style="font-size:11px;color:var(--g3);margin-bottom:10px">Share this link so workers can apply to join your team.</div>'+
+      '<div style="background:var(--tl5);border:1px solid #99f6e4;border-radius:8px;padding:10px 12px;font-size:11px;font-weight:700;color:var(--tl2);word-break:break-all;margin-bottom:10px">'+link+'</div>'+
+      '<div class="cp-r2" style="margin-bottom:0">'+
+        '<button class="cp-btn cp-btn-teal" onclick="cpCopyApplyLink()">📋 Copy Link</button>'+
+        '<button class="cp-btn cp-btn-gray" onclick="cpOpenApplyLink()">🔗 Open</button>'+
+      '</div>'+
+    '</div>';
+}
+
+function cpRenderTeamPayroll(payroll, monthStr){
+  var el = document.getElementById('cpPayrollSummary') || document.getElementById('cpTeamContent');
+  var d = new Date(monthStr+'-01');
+  var monthLabel = d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  var totalEarned = payroll.reduce(function(s,p){ return s+p.earned; },0);
+
+  if(!payroll.length){
+    el.innerHTML =
+      '<div style="text-align:center;margin-bottom:16px">'+
+        '<div style="font-size:13px;font-weight:800;color:var(--g1)">'+monthLabel+'</div>'+
+      '</div>'+
+      '<div class="cp-empty"><big>💸</big><p>No fixed members with payroll configured</p></div>';
+    return;
+  }
+
+  el.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+      '<div style="font-size:13px;font-weight:800;color:var(--g1)">'+monthLabel+'</div>'+
+      '<div style="font-size:18px;font-weight:900;color:var(--tl)">Total: $'+totalEarned.toFixed(2)+'</div>'+
+    '</div>'+
+    payroll.map(function(p){
+      var payLabel = p.payType==='percent'?p.payRate+'% of revenue':p.payType==='hourly'?'$'+p.payRate+'/hr':'$'+p.payRate+'/job';
+      return '<div class="cp-card" style="margin-bottom:10px">'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+
+          '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--tl3),var(--tl));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff;flex-shrink:0">'+p.name.charAt(0).toUpperCase()+'</div>'+
+          '<div style="flex:1">'+
+            '<div style="font-size:13px;font-weight:800;color:var(--g1)">'+p.name+'</div>'+
+            '<div style="font-size:10px;color:var(--g3)">'+p.role+' · '+payLabel+'</div>'+
+          '</div>'+
+          '<div style="text-align:right">'+
+            '<div style="font-size:18px;font-weight:900;color:var(--tl)">$'+p.earned.toFixed(2)+'</div>'+
+            '<div style="font-size:9px;color:var(--g3);font-weight:700">to pay</div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="cp-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:0">'+
+          '<div class="cp-stat"><div class="cp-stat-v tl">'+p.jobs+'</div><div class="cp-stat-l">Jobs</div></div>'+
+          '<div class="cp-stat"><div class="cp-stat-v">'+p.hours+'h</div><div class="cp-stat-l">Hours</div></div>'+
+          '<div class="cp-stat"><div class="cp-stat-v am">$'+p.revenue.toFixed(0)+'</div><div class="cp-stat-l">Revenue</div></div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+}
+
+function cpRenderWorkHoursSettings(workHours,members){
+  var el=document.getElementById('cpWorkHrs');
+  if(!el)return;
+  var all=[{email:_cp.user.email,name:'Myself'}].concat(members);
+  el.innerHTML=all.map(function(m){
+    var wh=workHours[m.email]||{start:'08:00',end:'18:00'};
+    var k=m.email.replace(/[@.]/g,'_');
+    return'<div style="padding:8px 0;border-bottom:1px solid var(--g5)"><div style="font-size:11px;font-weight:800;color:var(--tl2);margin-bottom:6px">👤 '+m.name+'</div>'+
+    '<div class="cp-r2" style="margin-bottom:0">'+
+    '<div class="cp-grp" style="margin-bottom:8px"><label class="cp-lbl">Start</label><input type="time" id="wh_s_'+k+'" class="cp-inp cp-inp-sm" value="'+wh.start+'" style="margin-bottom:0"></div>'+
+    '<div class="cp-grp" style="margin-bottom:8px"><label class="cp-lbl">End</label><input type="time" id="wh_e_'+k+'" class="cp-inp cp-inp-sm" value="'+wh.end+'" style="margin-bottom:0"></div>'+
+    '</div>'+
+    '<button class="cp-btn cp-btn-teal" style="font-size:11px;padding:7px" onclick="cpSaveWorkHours(\''+m.email+'\',\''+k+'\')">💾 Save</button></div>';
+  }).join('');
+}
+
+function cpRenderSpMemSel(members){var wrap=document.getElementById('cpSpMemWrap');var sel=document.getElementById('cpSpMem');if(!wrap||!sel||!members.length){if(wrap)wrap.style.display='none';return;}wrap.style.display='block';sel.innerHTML='<option value="">Myself</option>';members.forEach(function(m){sel.innerHTML+='<option value="'+m.email+'">'+m.name+'</option>';});}
+
+function cpRenderAssigned(members){
+  var wrap=document.getElementById('cpAssignedWrap');
+  var sel=document.getElementById('cpAssigned');
+  wrap.style.display='block';
+  sel.innerHTML='<option value="">-- Assign to --</option>';
+  sel.innerHTML+='<option value="'+_cp.user.email+'">'+((_cp.user.name||_cp.user.email).split(' ')[0])+' (Me)</option>';
+  members.forEach(function(m){
+    sel.innerHTML+='<option value="'+m.email+'">'+m.name+'</option>';
+  });
+}
+function cpRenderSchMem(members){var hm=document.getElementById('cpJMem');if(hm){hm.innerHTML='<option value="">All</option>';hm.innerHTML+='<option value="'+_cp.user.email+'">'+((_cp.user.name||_cp.user.email).split(' ')[0])+' (Owner)</option>';members.forEach(function(m){hm.innerHTML+='<option value="'+m.email+'">'+m.name+'</option>';});}}

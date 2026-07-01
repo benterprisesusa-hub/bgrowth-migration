@@ -1,0 +1,740 @@
+// ── JOB OFFER ─────────────────────────────────────────────────
+var _cpJoOffers=[];
+var _cpJoTab='open';
+var _cpJoPricing='hour';
+var _cpJoCleanType='standard';
+
+function cpJoShowForm(){
+  var f=document.getElementById('cpJoForm');
+  f.style.display=f.style.display==='none'?'block':'none';
+  cpSetV('cpJoDate',new Date().toISOString().slice(0,10));
+  if(!_cp.clients||!_cp.clients.length){
+    google.script.run.withSuccessHandler(function(clients){
+      _cp.clients=clients||[];
+    }).cleaning_get@Clients(_cp.user.email);
+  }
+  _cpJoCleanType='standard';
+  document.querySelectorAll('[id^="cpJoCT_"]').forEach(function(c){c.classList.remove('on');});
+  var sc=document.getElementById('cpJoCT_standard');if(sc)sc.classList.add('on');
+  _cpJoPricing='hour';
+  var ph=document.getElementById('cpJoPriceHour');if(ph)ph.style.display='block';
+  var ps=document.getElementById('cpJoPriceSqft');if(ps)ps.style.display='none';
+  var pr=document.getElementById('cpJoPriceRooms');if(pr)pr.style.display='none';
+  var pth=document.getElementById('cpJoPtH');if(pth){pth.classList.add('on');}
+  var pts=document.getElementById('cpJoPtS');if(pts)pts.classList.remove('on');
+  var ptr=document.getElementById('cpJoPtR');if(ptr)ptr.classList.remove('on');
+  var svcDefault = cpV('cpJoSvc')||'house';
+  var pricingDefault = (_cp.settings&&_cp.settings.pricing&&_cp.settings.pricing[svcDefault])||{};
+  if(pricingDefault.hourRate) cpSetV('cpJoHRate', pricingDefault.hourRate);
+  cpJoRenderFees();
+  var hint=document.getElementById('cpJoDeepHint');
+  if(hint&&_cp.settings&&_cp.settings.deepClean&&_cp.settings.deepClean.value>0){
+    hint.textContent='+'+_cp.settings.deepClean.value+(_cp.settings.deepClean.type==='percent'?'%':' flat');
+  }
+  cpJoCalcClientValue();
+}
+
+function cpJoHideForm(){document.getElementById('cpJoForm').style.display='none';}
+
+function cpJoCalcTotal(){
+  var pay=parseFloat(document.getElementById('cpJoPay').value)||0;
+  var bonus=parseFloat(document.getElementById('cpJoBonus').value)||0;
+  document.getElementById('cpJoTotalPay').textContent='$'+(pay+bonus).toFixed(2);
+  cpJoCalcClientValue();
+}
+
+var _cpJoRoomCounts = {studio:false, beds:0, baths:0};
+
+function cpJoToggleStudio(){
+  _cpJoRoomCounts.studio = !_cpJoRoomCounts.studio;
+  var btn = document.getElementById('cpJoRoomStudioBtn');
+  var card = document.getElementById('cpJoRoomStudioCard');
+  if(btn){ btn.textContent = _cpJoRoomCounts.studio?'✓ Added':'Add'; btn.style.borderColor = _cpJoRoomCounts.studio?'var(--tl)':'var(--g5)'; btn.style.color = _cpJoRoomCounts.studio?'var(--tl)':'var(--g2)'; btn.style.background = _cpJoRoomCounts.studio?'var(--tl5)':'var(--w)'; }
+  if(card) card.style.borderColor = _cpJoRoomCounts.studio?'var(--tl)':'var(--g5)';
+  cpJoCalcClientValue();
+}
+
+function cpJoRoomCount(key, delta){
+  _cpJoRoomCounts[key] = Math.max(0, (_cpJoRoomCounts[key]||0)+delta);
+  var elId = key==='beds'?'cpJoRoomBedsVal':'cpJoRoomBathsVal';
+  var cardId = key==='beds'?'cpJoRoomBedCard':'cpJoRoomBathCard';
+  var el = document.getElementById(elId);
+  var card = document.getElementById(cardId);
+  if(el) el.textContent = _cpJoRoomCounts[key];
+  if(card) card.style.borderColor = _cpJoRoomCounts[key]>0?'var(--tl)':'var(--g5)';
+  cpJoCalcClientValue();
+}
+
+function cpJoRenderRoomPrices(){
+  var rp = (_cp.settings&&_cp.settings.roomPricing)||{};
+  var sp = document.getElementById('cpJoRoomStudioPrice');
+  var bp = document.getElementById('cpJoRoomBedPrice');
+  var bap = document.getElementById('cpJoRoomBathPrice');
+  if(sp&&rp.studio) sp.textContent = '$'+parseFloat(rp.studio.price||0).toFixed(2)+' flat';
+  if(bp&&rp.bedroom) bp.textContent = '$'+parseFloat(rp.bedroom.price||0).toFixed(2)+' each';
+  if(bap&&rp.bathroom) bap.textContent = '$'+parseFloat(rp.bathroom.price||0).toFixed(2)+' each';
+}
+
+function cpJoResetRooms(){
+  _cpJoRoomCounts = {studio:false,beds:0,baths:0};
+  var sbtn = document.getElementById('cpJoRoomStudioBtn');
+  if(sbtn){sbtn.textContent='Add';sbtn.style.borderColor='var(--g5)';sbtn.style.color='var(--g2)';sbtn.style.background='var(--w)';}
+  ['cpJoRoomBedsVal','cpJoRoomBathsVal'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='0';});
+  ['cpJoRoomStudioCard','cpJoRoomBedCard','cpJoRoomBathCard'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.borderColor='var(--g5)';});
+  var rt = document.getElementById('cpJoRoomTotal');if(rt)rt.textContent='$0.00';
+}
+
+function cpJoLookupZip(){
+  var zip = cpV('cpJoZip').trim();
+  if(zip.length<5) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(!r||!r.ok) return;
+    cpSetV('cpJoCity', r.city||'');
+    cpSetV('cpJoState', r.state||'');
+  }).cleaning_getZipLatLng(zip);
+}
+
+function cpJoToggleAutoResend(el){
+  el.classList.toggle('on');
+  var isOn = el.classList.contains('on');
+  document.getElementById('cpJoAutoResendLabel').textContent = isOn ? 'On' : 'Off';
+  document.getElementById('cpJoResendWrap').style.display = isOn ? 'block' : 'none';
+}
+
+function cpJoResendCount(delta){
+  var el = document.getElementById('cpJoResendCountVal');
+  var val = Math.max(1, Math.min(5, (parseInt(el.textContent)||1) + delta));
+  el.textContent = val;
+}
+
+var _cpJoExpiryPoll = null;
+
+function cpJoStartExpiryPoll(){
+  if(_cpJoExpiryPoll) clearInterval(_cpJoExpiryPoll);
+  cpJoCheckExpiring();
+  _cpJoExpiryPoll = setInterval(cpJoCheckExpiring, 30000);
+}
+
+function cpJoCheckExpiring(){
+  if(!_cp.user||typeof google==='undefined') return;
+  google.script.run.withSuccessHandler(function(list){
+    if(!list||!list.length){
+      var banner = document.getElementById('cpJoExpiryBanner');
+      if(banner) banner.style.display='none';
+      return;
+    }
+    var container = document.getElementById('cpt11');
+    var banner = document.getElementById('cpJoExpiryBanner');
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'cpJoExpiryBanner';
+      container.insertBefore(banner, container.firstChild);
+    }
+    banner.style.cssText = 'background:linear-gradient(135deg,#92400e,#f59e0b);border-radius:10px;padding:10px 14px;margin-bottom:12px;color:#fff';
+    banner.innerHTML = '<div style="font-size:11px;font-weight:900;margin-bottom:6px">⏰ Offers expiring soon</div>'+
+      list.map(function(o){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-top:1px solid rgba(255,255,255,.2)">'+
+          '<span style="font-size:11px;font-weight:700">'+o.title+'</span>'+
+          '<span style="font-size:10px;font-weight:800;background:rgba(255,255,255,.2);border-radius:20px;padding:2px 8px">'+
+          (o.expired ? 'Expired' : o.minsLeft+'min left')+
+          '</span>'+
+        '</div>';
+      }).join('');
+    var badge = document.getElementById('cpJoBadge');
+    if(badge){ badge.style.display='inline'; badge.textContent=list.length; }
+  }).cleaning_getExpiringOffers(_cp.user.email);
+}
+
+function cpJoGetUrgency(date){
+  var today=new Date().toISOString().slice(0,10);
+  var tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
+  if(date<=today)return'urgent';
+  if(date<=tomorrow)return'same_day';
+  return'scheduled';
+}
+
+function cpJoLoadWorkers(){
+  var zip = cpV('cpJoZip');
+  var svc = cpV('cpJoSvc');
+  var el = document.getElementById('cpJoWorkersList');
+  if(!el) return;
+  if(!zip){ el.innerHTML='<div style="font-size:11px;color:var(--g3);padding:8px">Enter ZIP to see available workers</div>'; return; }
+  el.innerHTML='<div class="cp-loader" style="padding:12px"><span class="cp-spin"></span>Loading workers...</div>';
+  google.script.run
+    .withSuccessHandler(function(result){
+      if(!result||!result.ok||!result.workers.length){
+        el.innerHTML='<div style="font-size:11px;color:var(--amber);padding:8px">⚠️ No workers in pool. Offer will be sent to email list in Settings.</div>';
+        return;
+      }
+      var workers = result.workers;
+      el.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+          '<div style="font-size:10px;font-weight:800;color:var(--g3);text-transform:uppercase;letter-spacing:.5px">'+workers.length+' Workers Found</div>'+
+          '<button class="cp-btn cp-btn-gray cp-btn-sm" onclick="cpJoSelectAll()">Select All</button>'+
+        '</div>'+
+        workers.map(function(w){
+          var distStr = w.distance!==null ? (w.distance===0 ? '< 1 mi' : parseFloat(w.distance).toFixed(1)+' mi') : 'No ZIP';
+          var svcBadge = w.hasService
+            ? '<span style="font-size:9px;font-weight:800;background:rgba(13,148,136,.12);color:var(--tl2);border-radius:20px;padding:1px 6px">✓ Specialty</span>'
+            : '<span style="font-size:9px;font-weight:800;background:var(--g6);color:var(--g4);border-radius:20px;padding:1px 6px">Other</span>';
+          var icons = (w.transportation?'🚗 ':'')+(w.emergencyJobs?'⚡':'');
+          return '<label style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;border:1.5px solid var(--g5);margin-bottom:6px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--tl)\'" onmouseout="this.style.borderColor=\'var(--g5)\'">'+
+            '<input type="checkbox" class="cpJoWorkerCb" value="'+w.email+'" style="width:16px;height:16px;accent-color:var(--tl);flex-shrink:0">'+
+            '<div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--tl3),var(--tl));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0">'+w.name.charAt(0).toUpperCase()+'</div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:12px;font-weight:800;color:var(--g1)">'+w.name+' '+svcBadge+'</div>'+
+              '<div style="font-size:10px;color:var(--g3);margin-top:2px">📍 '+distStr+(icons?' · '+icons:'')+'</div>'+
+            '</div>'+
+          '</label>';
+        }).join('');
+    })
+    .withFailureHandler(function(){
+      el.innerHTML='<div style="font-size:11px;color:var(--red);padding:8px">Error loading workers</div>';
+    })
+    .cleaning_getAvailableWorkers(_cp.user.email, zip, svc);
+}
+
+function cpJoSelectAll(){
+  document.querySelectorAll('.cpJoWorkerCb').forEach(function(cb){ cb.checked=true; });
+}
+
+function cpJoSetCleanType(type,el){
+  _cpJoCleanType=type;
+  document.querySelectorAll('[id^="cpJoCT_"]').forEach(function(c){c.classList.remove('on');});
+  el.classList.add('on');
+  if(_cpJoPricing==='sqft')cpJoLoadSqftDefaults();
+  cpJoCalcClientValue();
+}
+
+function cpJoSetPricing(method,el){
+  _cpJoPricing=method;
+  document.getElementById('cpJoPtH').classList.remove('on');
+  document.getElementById('cpJoPtS').classList.remove('on');
+  document.getElementById('cpJoPtR').classList.remove('on');
+  el.classList.add('on');
+  document.getElementById('cpJoPriceHour').style.display=method==='hour'?'block':'none';
+  document.getElementById('cpJoPriceSqft').style.display=method==='sqft'?'block':'none';
+  document.getElementById('cpJoPriceRooms').style.display=method==='rooms'?'block':'none';
+  if(method==='rooms')cpJoPopulateRoomsSel();
+  if(method==='sqft')cpJoLoadSqftDefaults();
+  cpJoCalcClientValue();
+}
+
+function cpJoLoadSqftDefaults(){
+  var svc=cpV('cpJoSvc');
+  var sqftTime=(_cp.settings&&_cp.settings.sqftTime)||{};
+  var def=(CP_SQFT_TIME_DEFAULTS&&CP_SQFT_TIME_DEFAULTS[svc])||{std:0.25,deep:0.40};
+  var svcTimes=sqftTime[svc]||def;
+  var minPerSqft=_cpJoCleanType==='deep'?svcTimes.deep:svcTimes.std;
+  var pricing=(_cp.settings&&_cp.settings.pricing&&_cp.settings.pricing[svc])||{};
+  var rateEl=document.getElementById('cpJoSqftRate');
+  var timeEl=document.getElementById('cpJoSqftTime');
+  if(rateEl&&!rateEl.value&&pricing.sqftRate)rateEl.value=pricing.sqftRate;
+  if(timeEl&&!timeEl.value)timeEl.value=minPerSqft;
+}
+
+function cpJoCalcClientValue(){
+  var base=0,dur=1;
+  if(_cpJoPricing==='hour'){
+    dur=parseFloat(cpV('cpJoDur'))||1;
+    base=dur*(parseFloat(cpV('cpJoHRate'))||0);
+  } else if(_cpJoPricing==='sqft'){
+    var sqft=parseFloat(cpV('cpJoSqft'))||0;
+    var sr=parseFloat(cpV('cpJoSqftRate'))||0;
+    var mins=parseFloat(cpV('cpJoSqftTime'))||0.25;
+    base=sqft*sr;
+    dur=Math.max(1,Math.ceil((sqft*mins)/60*2)/2);
+  } else if(_cpJoPricing==='rooms'){
+    var rp2=(_cp.settings&&_cp.settings.roomPricing)||{};
+    var stP=_cpJoRoomCounts.studio?(parseFloat((rp2.studio&&rp2.studio.price)||0)):0;
+    var bdP=_cpJoRoomCounts.beds*(parseFloat((rp2.bedroom&&rp2.bedroom.price)||0));
+    var baP=_cpJoRoomCounts.baths*(parseFloat((rp2.bathroom&&rp2.bathroom.price)||0));
+    base=stP+bdP+baP;
+    var stTime=_cpJoRoomCounts.studio?(parseFloat((rp2.studio&&rp2.studio.stdTime)||0)):0;
+    var bdTime=_cpJoRoomCounts.beds*(parseFloat((rp2.bedroom&&rp2.bedroom.stdTime)||0));
+    var baTime=_cpJoRoomCounts.baths*(parseFloat((rp2.bathroom&&rp2.bathroom.stdTime)||0));
+    dur=Math.max(1,Math.ceil(((stTime+bdTime+baTime)/60)*2)/2);
+    var rt=document.getElementById('cpJoRoomTotal');if(rt)rt.textContent='$'+base.toFixed(2);
+  }
+  if(_cpJoCleanType==='deep'&&_cp.settings&&_cp.settings.deepClean&&_cp.settings.deepClean.value>0){
+    var dc=_cp.settings.deepClean;
+    base+=dc.type==='percent'?base*(dc.value/100):dc.value;
+  }
+  base += cpJoGetFeesTotal();
+
+  var pay=(parseFloat(cpV('cpJoPay'))||0)+(parseFloat(cpV('cpJoBonus'))||0);
+  var margin=base-pay;
+  var cv=document.getElementById('cpJoClientVal');if(cv)cv.textContent='$'+base.toFixed(2);
+  var dd=document.getElementById('cpJoDurDisplay');if(dd)dd.textContent=dur+(dur===1?' hr':' hrs');
+  var wp=document.getElementById('cpJoWorkerPaySummary');if(wp)wp.textContent='$'+pay.toFixed(2);
+  var mg=document.getElementById('cpJoMargin');
+  if(mg){mg.textContent='$'+margin.toFixed(2);mg.style.color=margin>=0?'var(--green)':'var(--red)';}
+  return{clientValue:base,duration:dur};
+}
+
+function cpJoFromRequest(id){
+  var r = _cpReqData.find(function(x){ return String(x.id)===String(id); });
+  if(!r){ toast('Request not found','err'); return; }
+  cpGoTab(11, document.getElementById('cpn11'));
+  setTimeout(function(){
+    var f = document.getElementById('cpJoForm');
+    if(f.style.display==='none') cpJoShowForm();
+    setTimeout(function(){
+      cpSetV('cpJoDate', r.preferredDate||new Date().toISOString().slice(0,10));
+      cpSetV('cpJoTime', r.preferredTime||'');
+      cpSetV('cpJoAddr', r.address||'');
+      cpSetV('cpJoTitle', r.serviceType ? cpTypeName(r.serviceType)+' — '+r.name : '');
+      cpSetV('cpJoCity', r.city||'');
+      cpSetV('cpJoState', r.state||'');
+      cpSetV('cpJoZip', r.zip||'');
+      cpSetV('cpJoNotes', r.notes||'');
+      var svcSel = document.getElementById('cpJoSvc');
+      if(svcSel&&r.serviceType){ svcSel.value=r.serviceType; cpJoOnSvcChange(); }
+      var clientSel = document.getElementById('cpJoClient');
+      if(clientSel&&r.name){
+        var opt = Array.from(clientSel.options).find(function(o){ return o.text===r.name; });
+        if(opt) clientSel.value = opt.value;
+      }
+      if(r.cleanType){
+        _cpJoCleanType=r.cleanType;
+        document.querySelectorAll('[id^="cpJoCT_"]').forEach(function(c){ c.classList.remove('on'); });
+        var ctEl=document.getElementById('cpJoCT_'+r.cleanType);
+        if(ctEl) ctEl.classList.add('on');
+      }
+      var svc = r.serviceType||'house';
+      var method = (_cp.settings&&_cp.settings.requestFormMethod)||'hour';
+      var pricing = (_cp.settings&&_cp.settings.pricing&&_cp.settings.pricing[svc])||{};
+      if(method==='hour'&&pricing.hourRate) cpSetV('cpJoHRate', pricing.hourRate);
+      if(method==='sqft'){
+        cpJoSetPricing('sqft', document.getElementById('cpJoPtS'));
+        if(r.sqft) cpSetV('cpJoSqft', r.sqft);
+        cpJoLoadSqftDefaults();
+      }
+      if(method==='rooms') cpJoSetPricing('rooms', document.getElementById('cpJoPtR'));
+      if(r.extras&&r.extras.length){
+        r.extras.forEach(function(e){
+          var qtyEl = document.getElementById('cpJoFeeQty_'+e.id);
+          var item = document.getElementById('cpJoFee_'+e.id);
+          if(qtyEl&&item){
+            qtyEl.textContent = e.qty||1;
+            item.style.borderColor='var(--tl)';
+            item.style.background='var(--tl5)';
+          }
+        });
+        cpJoUpdateFeesTotal();
+      }
+      cpJoCalcClientValue();
+      toast('Job Offer pre-filled from request ✓');
+    }, 400);
+  }, 300);
+}
+
+function cpJoOnSvcChange(){
+  var svc = cpV('cpJoSvc');
+  var pricing = (_cp.settings&&_cp.settings.pricing&&_cp.settings.pricing[svc])||{};
+  if(_cpJoPricing==='hour'&&pricing.hourRate) cpSetV('cpJoHRate', pricing.hourRate);
+  if(_cpJoPricing==='sqft'&&pricing.sqftRate) cpSetV('cpJoSqftRate', pricing.sqftRate);
+  cpJoRenderFees();
+  cpJoCalcClientValue();
+}
+
+function cpJoRenderFees(){
+  var fees = (_cp.settings&&_cp.settings.extraFees)||[];
+  var section = document.getElementById('cpJoFeesSection');
+  var grid = document.getElementById('cpJoFeesGrid');
+  if(!fees.length||!section||!grid){ if(section)section.style.display='none'; return; }
+  section.style.display = 'block';
+  grid.innerHTML = fees.map(function(f){
+    var price = parseFloat(f.price)||0;
+    return '<div class="fee-compact-item" id="cpJoFee_'+f.id+'">'+
+      '<span style="font-size:16px;flex-shrink:0">'+f.ico+'</span>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:10px;font-weight:800;color:var(--g1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.name+'</div>'+
+        (price>0?'<div style="font-size:10px;color:var(--tl);font-weight:700">$'+price.toFixed(0)+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:3px;flex-shrink:0">'+
+        '<button onclick="cpJoFeeQty(\''+f.id+'\',-1)" style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--g4);background:var(--w);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--g2);font-family:Nunito,sans-serif;padding:0">−</button>'+
+        '<span id="cpJoFeeQty_'+f.id+'" style="font-size:12px;font-weight:900;color:var(--g1);min-width:14px;text-align:center">0</span>'+
+        '<button onclick="cpJoFeeQty(\''+f.id+'\',1)" style="width:20px;height:20px;border-radius:50%;border:1.5px solid var(--tl);background:var(--tl5);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--tl);font-family:Nunito,sans-serif;padding:0">+</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  cpJoUpdateFeesTotal();
+}
+
+function cpJoFeeQty(id, delta){
+  var el = document.getElementById('cpJoFeeQty_'+id);
+  var item = document.getElementById('cpJoFee_'+id);
+  if(!el||!item) return;
+  var current = parseInt(el.textContent)||0;
+  var next = Math.max(0, current+delta);
+  el.textContent = next;
+  item.style.borderColor = next>0 ? 'var(--tl)' : 'var(--g5)';
+  item.style.background = next>0 ? 'var(--tl5)' : 'var(--g6)';
+  cpJoUpdateFeesTotal();
+  cpJoCalcClientValue();
+}
+
+function cpJoGetFeesTotal(){
+  var fees = (_cp.settings&&_cp.settings.extraFees)||[];
+  return fees.reduce(function(s,f){
+    var qty = parseInt((document.getElementById('cpJoFeeQty_'+f.id)||{}).textContent)||0;
+    return s + qty*(parseFloat(f.price)||0);
+  },0);
+}
+
+function cpJoUpdateFeesTotal(){
+  var total = cpJoGetFeesTotal();
+  var el = document.getElementById('cpJoFeesTotal');
+  if(el) el.textContent = '$'+total.toFixed(2);
+}
+
+function cpJoGetSelectedFees(){
+  var fees = (_cp.settings&&_cp.settings.extraFees)||[];
+  var result = [];
+  fees.forEach(function(f){
+    var qty = parseInt((document.getElementById('cpJoFeeQty_'+f.id)||{}).textContent)||0;
+    if(qty>0) result.push({id:f.id, name:f.name, ico:f.ico, price:parseFloat(f.price)||0, qty:qty, total:qty*(parseFloat(f.price)||0)});
+  });
+  return result;
+}
+
+function cpJoShowEmailSettings(){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:400px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:15px;font-weight:900">📧 Job Offer Emails</div>'+
+        '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--g5);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;font-family:Nunito,sans-serif">✕</button>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--g3);margin-bottom:8px">Emails that receive Job Offers. Separate by comma or new line.</div>'+
+      '<textarea id="modalOfferEmails" class="cp-inp" rows="5" placeholder="email1@example.com, email2@example.com" style="resize:vertical;font-family:Nunito,sans-serif">'+((_cp.settings&&_cp.settings.offerEmails)||'')+'</textarea>'+
+      '<button class="cp-btn cp-btn-teal" onclick="cpSaveOfferEmailsModal(this.closest(\'[style*=fixed]\'))">💾 Save</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function cpSaveOfferEmailsModal(modal){
+  var val=document.getElementById('modalOfferEmails').value.trim();
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){
+      toast('Emails saved ✓');
+      if(_cp.settings)_cp.settings.offerEmails=val;
+      var cnt=document.getElementById('cpJoEmailCount');
+      if(cnt){var arr=val.split(/[\n,]/).filter(function(e){return e.trim();});cnt.textContent=arr.length+' email(s)';}
+      if(modal)modal.remove();
+    } else toast((r&&r.message)||'Error','err');
+  }).cleaning_saveSetting(_cp.user.email,'OFFER_EMAILS',val);
+}
+
+function cpSmartAssign(){
+  var date=cpV('cpDate');
+  var time=cpV('cpTime');
+  if(!date){toast('Select a date first','err');return;}
+  var dur=cpCalcDuration()||1;
+  var clientVal=cpV('cpClient')||cpV('cpClientId')||'';
+  var clientSearchVal=document.getElementById('cpClientSearchInput')?document.getElementById('cpClientSearchInput').value:'';
+  var client=_cp.clients.find(function(c){return(c.id&&c.id===clientVal)||c.name===clientVal||c.name===clientSearchVal;});
+  var clientZip=client?client.zipcode:'';
+  var btn=document.getElementById('cpSmartAssignBtn');
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  google.script.run
+  .withSuccessHandler(function(r){
+    if(btn){btn.textContent='🤖 Smart';btn.disabled=false;}
+    if(!r||!r.ok){toast(r?r.message:'No workers available','warn');return;}
+    cpShowSmartAssignModal(r.candidates);
+  })
+  .withFailureHandler(function(e){
+    if(btn){btn.textContent='🤖 Smart';btn.disabled=false;}
+    toast('Error: '+e.message,'err');
+  })
+  .cleaning_smartAssign(_cp.user.email,date,time,dur,_cp.svcType,clientZip);
+}
+
+function cpShowSmartAssignModal(candidates){
+  var old = document.getElementById('cpSmartPanel');
+  if(old) old.remove();
+
+  var panel = document.createElement('div');
+  panel.id = 'cpSmartPanel';
+  panel.style.cssText = 
+    'position:fixed;top:var(--header-h,60px);right:0;width:280px;height:calc(100vh - 60px);'+
+    'background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.12);z-index:500;'+
+    'display:flex;flex-direction:column;overflow:hidden;'+
+    'transform:translateX(100%);transition:transform .25s ease';
+
+  panel.innerHTML =
+    '<div style="background:linear-gradient(135deg,var(--b3),#2389c8);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
+      '<div>'+
+        '<div style="font-size:13px;font-weight:900;color:#fff">🤖 Smart Assign</div>'+
+        '<div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px">Choose in the dropdown below</div>'+
+      '</div>'+
+      '<button onclick="document.getElementById(\'cpSmartPanel\').remove()" '+
+        'style="background:rgba(255,255,255,.2);border:none;border-radius:7px;padding:5px 9px;cursor:pointer;font-size:14px;color:#fff;font-family:Nunito,sans-serif">✕</button>'+
+    '</div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px">'+
+      candidates.map(function(c,i){
+        var distStr = c.distance!==null ? (c.distance===0 ? '< 1 mi' : parseFloat(c.distance).toFixed(1)+' mi') : 'No ZIP';
+        var isFirst = i===0;
+        return '<div style="background:'+(isFirst?'var(--tl5)':'var(--g6)')+';border:1.5px solid '+(isFirst?'var(--tl)':'var(--g5)')+';border-radius:10px;padding:10px;margin-bottom:8px">'+
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+            '<div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--b3),#2389c8);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0">'+c.name.charAt(0).toUpperCase()+'</div>'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:12px;font-weight:800;color:var(--g1)">'+c.name+'</div>'+
+              '<div style="margin-top:2px">'+
+                '<span style="font-size:9px;font-weight:800;border-radius:20px;padding:2px 7px;background:'+(c.memberType==='fixed'?'rgba(29,111,164,.12)':'rgba(245,158,11,.12)')+';color:'+(c.memberType==='fixed'?'var(--b3)':'#92400e')+'">'+
+                  (c.memberType==='fixed'?'Fixed':'On-Demand')+
+                '</span>'+
+              '</div>'+
+              '<div style="font-size:10px;color:var(--g3)">'+
+                '📍 '+distStr+
+                (c.travelMinutes!==null&&c.travelMinutes!==undefined&&c.distance>0?' · 🕐 ~'+c.travelMinutes+'min':'')+ 
+                (c.isFromLastJob?' <span style="font-size:9px;background:rgba(59,91,219,.1);color:var(--b3);border-radius:4px;padding:1px 4px">from last job</span>':'')+
+                (c.rating>0?' · ⭐'+c.rating.toFixed(1):'')+
+              '</div>'+
+            '</div>'+
+            (isFirst?'<span style="font-size:9px;font-weight:800;background:var(--tl);color:#fff;border-radius:20px;padding:2px 7px">Best</span>':'')+
+          '</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:4px">'+
+            (c.hasService?'<span style="font-size:9px;font-weight:800;background:rgba(13,148,136,.12);color:var(--tl2);border-radius:20px;padding:2px 7px">✓ Specialty</span>':'')+
+            (c.transportation?'<span style="font-size:9px;font-weight:800;background:var(--g5);color:var(--g2);border-radius:20px;padding:2px 7px">🚗 Transport</span>':'')+
+            (c.emergencyJobs?'<span style="font-size:9px;font-weight:800;background:rgba(245,158,11,.12);color:#92400e;border-radius:20px;padding:2px 7px">⚡ Emergency</span>':'')+
+          '</div>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+    '<div style="padding:10px 12px;border-top:1px solid var(--g5);flex-shrink:0;background:var(--g6)">'+
+      '<div style="font-size:10px;color:var(--g3);font-weight:700;text-align:center">↑ Select worker in the Assigned dropdown above</div>'+
+    '</div>';
+
+  document.body.appendChild(panel);
+  requestAnimationFrame(function(){
+    panel.style.transform = 'translateX(0)';
+  });
+}
+
+function cpJoSend(){
+  var title=cpV('cpJoTitle').trim();
+  var date=cpV('cpJoDate');
+  var time=cpV('cpJoTime');
+  var pay=parseFloat(cpV('cpJoPay'))||0;
+  if(!title){toast('Enter a job title','err');return;}
+  if(!date){toast('Select a date','err');return;}
+  if(!time){toast('Select a time','err');return;}
+  if(!pay){toast('Enter the payment amount','err');return;}
+
+  var selectedWorkers = [];
+  document.querySelectorAll('.cpJoWorkerCb:checked').forEach(function(cb){ selectedWorkers.push(cb.value); });
+  
+  var btn=document.querySelector('#cpJoForm .cp-btn-teal');
+  btn.textContent='Sending...';btn.disabled=true;
+
+  var joCalc=cpJoCalcClientValue();
+  var data={
+    title:title, date:date, time:time, client:cpV('cpJoClient'),
+    serviceType:cpV('cpJoSvc'),
+    cleanType:_cpJoCleanType,
+    pricingMethod:_cpJoPricing,
+    clientValue:joCalc.clientValue,
+    duration:joCalc.duration,
+    extraFees:cpJoGetSelectedFees(),
+    extraFeesTotal:cpJoGetFeesTotal(),
+    payment:pay, bonus:parseFloat(cpV('cpJoBonus'))||0,
+    workersNeeded:parseInt(cpV('cpJoWorkers'))||1,
+    address:cpV('cpJoAddr'), notes:cpV('cpJoNotes'),
+    urgency:cpJoGetUrgency(date),
+    workerEmails:selectedWorkers,
+    validityHours:parseInt(cpV('cpJoValidity'))||24,
+    autoResend:document.getElementById('cpJoAutoResendSwitch').classList.contains('on'),
+    resendMax:parseInt(document.getElementById('cpJoResendCountVal').textContent)||1,
+    clientValue:joCalc.clientValue,
+    duration:joCalc.duration
+  };
+
+  google.script.run
+    .withSuccessHandler(function(r){
+      btn.innerHTML='📤 Send Offer';btn.disabled=false;
+      if(r&&r.ok){
+        toast('Job offer sent to '+r.sentCount+' workers! ✓');
+        cpJoHideForm();
+        var jcsi=document.getElementById('cpJoClientSearchInput');if(jcsi){jcsi.value='';jcsi.style.borderColor='var(--g5)';}
+        var jcsc=document.getElementById('cpJoClientSearchClear');if(jcsc)jcsc.style.display='none';
+        var jcsd=document.getElementById('cpJoClientDropdown');if(jcsd)jcsd.classList.remove('show');
+        cpSetV('cpJoClient','');cpSetV('cpJoTime','');cpSetV('cpJoTitle','');
+        cpSetV('cpJoAddr','');cpSetV('cpJoCity','');cpSetV('cpJoState','');cpSetV('cpJoZip','');
+        cpSetV('cpJoNotes','');cpSetV('cpJoPay','');cpSetV('cpJoBonus','');
+        cpSetV('cpJoWorkers','1');cpSetV('cpJoValidity','24');
+        cpSetV('cpJoHRate','');cpSetV('cpJoSqft','');cpSetV('cpJoSqftRate','');
+        var sw=document.getElementById('cpJoAutoResendSwitch');
+        if(sw){sw.classList.remove('on');document.getElementById('cpJoAutoResendLabel').textContent='Off';document.getElementById('cpJoResendWrap').style.display='none';}
+        document.getElementById('cpJoResendCountVal').textContent='1';
+        cpJoResetRooms();
+        _cpJoCleanType='standard';
+        document.querySelectorAll('[id^="cpJoCT_"]').forEach(function(c){c.classList.remove('on');});
+        var sc=document.getElementById('cpJoCT_standard');if(sc)sc.classList.add('on');
+        cpJoSetPricing('hour',document.getElementById('cpJoPtH'));
+        cpJoSetTab('open',document.getElementById('cpJoTabOpen'));
+        cpJoLoad();
+      }
+      else toast((r&&r.message)||'Error sending offer','err');
+    })
+    .withFailureHandler(function(){btn.innerHTML='📤 Send Offer';btn.disabled=false;toast('Connection error','err');})
+    .cleaning_sendJobOffer(_cp.user.email,data);
+}
+
+function cpJoAssign(offerId,workerEmail,workerName){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:320px;text-align:center">'+
+    '<div style="font-size:36px;margin-bottom:12px">👤</div>'+
+    '<div style="font-size:15px;font-weight:900;color:var(--g1);margin-bottom:8px">Assign Job?</div>'+
+    '<div style="font-size:12px;color:var(--g3);margin-bottom:20px">Assign this job to <b>'+workerName+'</b>?</div>'+
+    '<div style="display:flex;gap:8px">'+
+      '<button class="cp-btn cp-btn-gray" onclick="this.closest(\'[style*=fixed]\').remove()">Cancel</button>'+
+      '<button class="cp-btn cp-btn-teal" onclick="this.closest(\'[style*=fixed]\').remove();cpJoDoAssign(\''+offerId+'\',\''+workerEmail+'\',\''+workerName+'\')">✅ Assign</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+function cpJoDoAssign(offerId,workerEmail,workerName){
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.ok){toast('Job assigned to '+workerName+' ✓');cpJoLoad();}
+      else toast((r&&r.message)||'Error','err');
+    })
+    .cleaning_assignJobOffer(_cp.user.email,offerId,workerEmail,workerName);
+}
+ 
+function cpJoCancel(offerId){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:320px;text-align:center">'+
+    '<div style="font-size:36px;margin-bottom:12px">🚨</div>'+
+    '<div style="font-size:15px;font-weight:900;color:var(--g1);margin-bottom:8px">Cancel Job Offer?</div>'+
+    '<div style="font-size:12px;color:var(--g3);margin-bottom:20px">This offer will be closed and workers will no longer be able to respond.</div>'+
+    '<div style="display:flex;gap:8px">'+
+      '<button class="cp-btn cp-btn-gray" onclick="this.closest(\'[style*=fixed]\').remove()">Keep Open</button>'+
+      '<button class="cp-btn cp-btn-red" onclick="this.closest(\'[style*=fixed]\').remove();cpJoDoCancell(\''+offerId+'\')">❌ Cancel Offer</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+function cpJoDoCancell(offerId){
+  google.script.run
+    .withSuccessHandler(function(r){
+      if(r&&r.ok){toast('Offer cancelled');cpJoLoad();}
+      else toast((r&&r.message)||'Error','err');
+    })
+    .cleaning_cancelJobOffer(_cp.user.email,offerId);
+}
+
+function cpJoRender(){
+  var el=document.getElementById('cpJoContent');
+  var filtered=_cpJoOffers.filter(function(o){
+    if(_cpJoTab==='open')      return o.status==='open';
+    if(_cpJoTab==='sent')      return(o.sentCount||0)>0;
+    if(_cpJoTab==='responses') return(o.responseCount||0)>0;
+    if(_cpJoTab==='history')   return o.status==='assigned'||o.status==='cancelled'||o.status==='expired';
+    return true;
+  });
+  if(!filtered.length){
+    var emojis={open:'🚨',sent:'📤',responses:'💬',history:'📚'};
+    var msgs={open:'No open job offers',sent:'No offers sent yet',responses:'No responses yet',history:'No history yet'};
+    el.innerHTML='<div class="cp-empty"><big>'+emojis[_cpJoTab]+'</big><p>'+msgs[_cpJoTab]+'</p>'+(
+      _cpJoTab==='open'?'<small>Create a job offer to send to your workers</small>':''
+    )+'</div>';
+    return;
+  }
+  el.innerHTML=filtered.map(function(o){
+    var urgColor=o.urgency==='urgent'?'#ef4444':o.urgency==='same_day'?'#f59e0b':'#3b82f6';
+    var urgLabel=o.urgency==='urgent'?'URGENT':o.urgency==='same_day'?'SAME DAY':'SCHEDULED';
+    var stColor=o.status==='open'?'var(--tl)':o.status==='assigned'?'var(--green)':o.status==='expired'?'var(--red)':'var(--g4)';
+    var responses=o.responses||[];
+    var available=responses.filter(function(r){return r.status==='available';});
+    var notAvail=responses.filter(function(r){return r.status==='not_available';});
+    var respHtml='';
+    if(responses.length&&(_cpJoTab==='responses'||_cpJoTab==='open')){
+      respHtml='<div style="margin-top:10px;border-top:1px solid var(--g5);padding-top:10px">'+
+        '<div style="font-size:10px;font-weight:800;color:var(--g3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Responses ('+responses.length+')</div>'+
+        responses.map(function(r){
+          var rColor=r.status==='available'?'#10b981':'#ef4444';
+          return'<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--g6)">'+
+            '<div style="width:30px;height:30px;border-radius:50%;background:var(--tl4);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">👤</div>'+
+            '<div style="flex:1"><div style="font-size:12px;font-weight:800;color:var(--g1)">'+r.name+'</div>'+
+            '<div style="font-size:10px;color:var(--g3)">'+(r.location||'')+(r.time?' · '+r.time:'')+'</div></div>'+
+            '<span style="font-size:9px;font-weight:800;border-radius:20px;padding:2px 8px;background:'+(r.status==='available'?'#d1fae5':'#fee2e2')+';color:'+rColor+'">'+(r.status==='available'?'Available':'Not Available')+'</span>'+
+            (r.status==='available'&&o.status!=='assigned'?'<button class="cp-btn cp-btn-teal cp-btn-xs" onclick="cpJoAssign(\''+o.id+'\',\''+r.email+'\',\''+r.name+'\')">Assign</button>':'')+
+          '</div>';
+        }).join('')+
+      '</div>';
+    }
+    return'<div class="cp-card" style="margin-bottom:10px;border-left:3px solid '+urgColor+'">'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">'+
+        '<div>'+
+          '<span style="font-size:9px;font-weight:800;border-radius:4px;padding:2px 7px;background:'+urgColor+';color:#fff;margin-right:6px">'+urgLabel+'</span>'+
+          '<span style="font-size:9px;font-weight:800;border-radius:20px;padding:2px 8px;background:var(--g6);color:'+stColor+'">'+o.status.toUpperCase()+'</span>'+
+          '<div style="font-size:14px;font-weight:900;color:var(--g1);margin-top:6px">'+o.title+'</div>'+
+        '</div>'+
+        (o.status==='open'?'<button class="cp-btn cp-btn-red cp-btn-xs" onclick="cpJoCancel(\''+o.id+'\')">Cancel</button>':'')+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'+
+        '<div style="font-size:11px;color:var(--g3)">📅 <b style="color:var(--g1)">'+o.date+'</b> at <b style="color:var(--g1)">'+cpFmtTime(o.time)+'</b></div>'+
+        '<div style="font-size:11px;color:var(--g3)">👤 <b style="color:var(--g1)">'+(o.client||'—')+'</b></div>'+
+        '<div style="font-size:11px;color:var(--g3)">👥 Need <b style="color:var(--g1)">'+o.workersNeeded+' worker'+(o.workersNeeded>1?'s':'')+'</b></div>'+
+        '<div style="font-size:11px;color:var(--g3)">💵 <b style="color:var(--tl)">$'+parseFloat(o.payment||0).toFixed(2)+(o.bonus>0?' + $'+parseFloat(o.bonus).toFixed(2)+' bonus':'')+'</b></div>'+
+        (o.address?'<div style="font-size:11px;color:var(--g3);grid-column:1/-1">📍 '+o.address+'</div>':'')+
+      '</div>'+
+      (o.expiresAt?'<div style="font-size:10px;font-weight:700;color:'+(o.status==='expired'?'var(--red)':'var(--amber)')+';margin-bottom:6px">⏰ '+(o.status==='expired'?'Expired':'Expires: '+o.expiresAt)+'</div>':'')+
+      '<div style="display:flex;gap:10px;align-items:center">'+
+        '<span style="font-size:10px;font-weight:700;color:var(--g3)">📤 '+(o.sentCount||0)+' invited</span>'+
+        '<span style="font-size:10px;font-weight:700;color:var(--green)">✅ '+available.length+' available</span>'+
+        '<span style="font-size:10px;font-weight:700;color:var(--red)">❌ '+notAvail.length+' unavailable</span>'+
+      '</div>'+
+      (o.notes?'<div style="margin-top:8px;font-size:11px;color:var(--g3);background:var(--g6);border-radius:7px;padding:8px">📝 '+o.notes+'</div>':'')+
+      respHtml+
+    '</div>';
+  }).join('');
+}
+
+function cpJoLoad(){
+  if(!_cp.user||typeof google==='undefined')return;
+  var el=document.getElementById('cpJoContent');
+  el.innerHTML='<div class="cp-loader"><span class="cp-spin"></span>Loading...</div>';
+  var emails=(_cp.settings&&_cp.settings.offerEmails)||'';
+  var cnt=document.getElementById('cpJoEmailCount');
+  if(cnt){var arr=emails.split(/[\n,]/).filter(function(e){return e.trim();});cnt.textContent=arr.length?arr.length+' email(s) configured':'No emails configured';}
+  google.script.run
+    .withSuccessHandler(function(offers){_cpJoOffers=offers||[];cpJoUpdateStats();cpJoRender();})
+    .withFailureHandler(function(){_cpJoOffers=[];cpJoRender();})
+    .cleaning_getJobOffers(_cp.user.email);
+}
+
+function cpJoUpdateStats(){
+  var open=_cpJoOffers.filter(function(o){return o.status==='open';}).length;
+  var sent=_cpJoOffers.filter(function(o){return(o.sentCount||0)>0;}).length;
+  var resp=_cpJoOffers.filter(function(o){return o.status==='open';}).reduce(function(s,o){
+  return s+(o.responses||[]).filter(function(r){return r.status==='available';}).length;
+},0);
+  var assigned=_cpJoOffers.filter(function(o){return o.status==='assigned';}).length;
+  document.getElementById('cpJoStOpen').textContent=open;
+  document.getElementById('cpJoStSent').textContent=sent;
+  document.getElementById('cpJoStResp').textContent=resp;
+  document.getElementById('cpJoStAssigned').textContent=assigned;
+  document.getElementById('cpJoStats').style.display='grid';
+  var pending=_cpJoOffers.reduce(function(s,o){
+    var avail=(o.responses||[]).filter(function(r){return r.status==='available';}).length;
+    return s+(o.status==='open'&&avail>0?avail:0);
+  },0);
+  var badge=document.getElementById('cpJoBadge');
+  if(badge){badge.style.display=pending>0?'inline':'none';badge.textContent=pending;}
+}
+
+function cpJoSetTab(tab,btn){
+  _cpJoTab=tab;
+  document.querySelectorAll('#cpt11 .cp-ptab').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  cpJoRender();
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Apps Script Migration",
+  "description": "A modern React application migrated from Google Apps Script.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

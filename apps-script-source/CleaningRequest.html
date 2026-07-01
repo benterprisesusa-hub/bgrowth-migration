@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Request Cleaning Service</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --tl:#2563eb;--tl2:#1d4ed8;--tl3:#1e3a8a;--tl4:#dbeafe;--tl5:#eff6ff;
+  --g1:#0f172a;--g2:#374151;--g3:#6b7280;--g4:#9ca3af;--g5:#e5e7eb;--g6:#f9fafb;
+  --w:#fff;--red:#ef4444;--amber:#f59e0b;--green:#10b981;
+}
+body{font-family:'Nunito',sans-serif;background:var(--g6);min-height:100vh;padding:0}
+
+/* ── HEADER ── */
+.req-hdr{background:linear-gradient(135deg,var(--tl3),var(--tl));padding:14px 20px 12px;text-align:center;color:#fff;position:relative;overflow:hidden;}
+.req-hdr::after{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:rgba(255,255,255,.06);border-radius:50%}
+.req-hdr::before{content:'';position:absolute;bottom:-40px;left:-40px;width:140px;height:140px;background:rgba(255,255,255,.04);border-radius:50%}
+.req-hdr-ico{font-size:26px;display:block;margin-bottom:3px}
+.req-hdr-biz{font-size:17px;font-weight:900;margin-bottom:2px}
+.req-hdr-sub{font-size:11px;opacity:.75;font-weight:600}
+
+/* ── BODY ── */
+.req-body{max-width:560px;margin:0 auto;padding:20px 16px 80px;}
+
+/* ── DESKTOP: layout 2 colunas no step 3 ── */
+@media(min-width:768px){
+  .req-body{max-width:900px;}
+  .step3-wrap{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+  .room-detail-panel{display:block}
+}
+@media(max-width:767px){
+  .step3-wrap{display:block}
+  .room-detail-panel{display:none}
+}
+
+/* ── STEP INDICATOR ── */
+.req-steps{display:flex;align-items:center;margin-bottom:20px;padding:0 4px}
+.req-step{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.req-step-num{width:28px;height:28px;border-radius:50%;background:var(--g5);color:var(--g3);font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.req-step-num.on{background:var(--tl);color:#fff}
+.req-step-num.done{background:var(--green);color:#fff}
+.req-step-lbl{font-size:9px;font-weight:800;color:var(--g4);text-align:center;white-space:nowrap}
+.req-step-lbl.on{color:var(--tl)}
+.req-step-lbl.done{color:var(--green)}
+.req-step-line{flex:1;height:2px;background:var(--g5);margin:0 4px;margin-bottom:14px;border-radius:2px;transition:background .2s}
+.req-step-line.done{background:var(--green)}
+
+/* ── CARDS ── */
+.req-card{background:var(--w);border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:14px}
+.req-card-title{font-size:11px;font-weight:900;color:var(--tl3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+
+/* ── FORM ELEMENTS ── */
+.lbl{display:block;font-size:10px;font-weight:800;color:var(--tl2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.inp{width:100%;padding:10px 12px;border:1.5px solid var(--g5);border-radius:9px;font-size:13px;font-family:'Nunito',sans-serif;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:12px;color:var(--g1);background:var(--w);-webkit-appearance:none}
+.inp:focus{border-color:var(--tl);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.inp::placeholder{color:var(--g4)}
+.grp{margin-bottom:0}.grp>.inp{margin-bottom:0}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.r3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.r2>.grp,.r3>.grp{margin-bottom:0}
+
+/* ── SERVICE GRID ── */
+.svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.svc-card{background:var(--g6);border:2px solid var(--g5);border-radius:10px;padding:10px 6px;cursor:pointer;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none}
+.svc-card:hover{border-color:var(--tl4);background:var(--tl5)}
+.svc-card.on{border-color:var(--tl);background:var(--tl5)}
+.svc-ico{font-size:22px;margin-bottom:4px}
+.svc-name{font-size:10px;font-weight:800;color:var(--g1);line-height:1.2}
+.svc-card.on .svc-name{color:var(--tl2)}
+.svc-price{font-size:10px;color:var(--tl);font-weight:700;margin-top:2px}
+
+/* ── ROOM CARDS ── */
+.room-card{background:var(--w);border:1.5px solid var(--g5);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:8px;transition:all .15s;cursor:pointer}
+.room-card:hover{border-color:var(--tl4)}
+.room-card.on{border-color:var(--tl);background:var(--tl5)}
+.room-card.active-detail{border-color:var(--tl);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.room-card-ico{font-size:24px;flex-shrink:0}
+.room-card-info{flex:1}
+.room-card-name{font-size:13px;font-weight:800;color:var(--g1)}
+.room-card-price{font-size:11px;color:var(--g3);margin-top:2px}
+.room-card-hint{font-size:10px;color:var(--tl);font-weight:700}
+.room-card-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.counter-btn{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--g5);background:var(--w);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--g2);transition:all .15s;font-family:'Nunito',sans-serif;line-height:1}
+.counter-btn:hover{border-color:var(--tl);color:var(--tl);background:var(--tl5)}
+.counter-val{font-size:14px;font-weight:900;color:var(--g1);min-width:20px;text-align:center}
+
+/* ── ROOM DETAIL PANEL (desktop) ── */
+.room-detail-panel{background:var(--w);border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden;position:sticky;top:20px}
+.room-detail-header{background:var(--tl5);padding:20px;text-align:center;border-bottom:1px solid var(--tl4)}
+.room-detail-ico{font-size:40px;margin-bottom:8px}
+.room-detail-name{font-size:16px;font-weight:900;color:var(--g1)}
+.room-detail-price{font-size:15px;font-weight:900;color:var(--tl);margin-top:4px}
+.room-detail-body{padding:16px}
+.room-detail-section{background:var(--g6);border-radius:10px;padding:12px;margin-bottom:10px}
+.room-detail-section-title{font-size:10px;font-weight:800;color:var(--g3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.room-detail-includes{background:var(--tl5);border:1px solid var(--tl4);border-radius:10px;padding:12px;margin-bottom:14px}
+.room-detail-includes-title{font-size:10px;font-weight:800;color:var(--tl2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.room-detail-item{font-size:12px;color:var(--g1);display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.room-detail-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;color:var(--g4);text-align:center}
+.room-detail-empty-ico{font-size:32px;margin-bottom:8px}
+.room-detail-empty-txt{font-size:12px;font-weight:700}
+
+/* ── EXTRAS GRID ── */
+.ext-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:0}
+.ext-card{background:var(--g6);border:2px solid var(--g5);border-radius:10px;padding:8px 6px;cursor:pointer;transition:all .15s;text-align:center;-webkit-user-select:none;user-select:none}
+.ext-card:hover{border-color:var(--tl4);background:var(--tl5)}
+.ext-card.on{border-color:var(--tl);background:var(--tl5)}
+.ext-ico{font-size:18px;margin-bottom:3px}
+.ext-name{font-size:9px;font-weight:800;color:var(--g1);line-height:1.2}
+.ext-price{font-size:10px;color:var(--tl);font-weight:800;margin-top:2px}
+.ext-card.on .ext-name{color:var(--tl2)}
+
+/* ── PETS TOGGLE ── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--g5);margin-top:4px}
+.toggle-track{position:relative;width:40px;height:22px;background:var(--g5);border-radius:11px;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle-track.on{background:var(--tl)}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.toggle-track.on .toggle-thumb{transform:translateX(18px)}
+
+/* ── SUMMARY ── */
+.req-summary{background:linear-gradient(135deg,var(--tl3),var(--tl2));border-radius:14px;padding:18px;color:#fff;margin-bottom:14px}
+.req-summary-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;opacity:.7;margin-bottom:14px}
+.sum-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:12px}
+.sum-row:last-child{border-bottom:none}
+.sum-lbl{opacity:.75}
+.sum-val{font-weight:800}
+.sum-total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)}
+.sum-total-lbl{font-size:11px;font-weight:800;opacity:.85}
+.sum-total-val{font-size:16px;font-weight:900}
+.sum-range{font-size:9px;opacity:.6;text-align:right;margin-top:1px}
+
+/* ── HOW IT WORKS ── */
+.how-card{background:var(--tl5);border:1px solid var(--tl4);border-radius:14px;padding:16px;margin-bottom:14px}
+.how-title{font-size:11px;font-weight:900;color:var(--tl3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
+.how-step{display:flex;gap:10px;margin-bottom:10px}
+.how-step:last-child{margin-bottom:0}
+.how-num{width:22px;height:22px;border-radius:50%;background:var(--tl);color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.how-txt{font-size:11px;color:var(--tl2);font-weight:700;line-height:1.5}
+
+/* ── BUTTONS ── */
+.btn{width:100%;padding:13px;border-radius:10px;border:none;font-size:14px;font-weight:900;font-family:'Nunito',sans-serif;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:active{transform:scale(.97)}
+.btn-teal{background:linear-gradient(135deg,var(--tl),var(--tl2));color:#fff;box-shadow:0 4px 16px rgba(37,99,235,.3)}
+.btn-gray{background:var(--g5);color:var(--g2)}
+.btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ── ERROR ── */
+.err-msg{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:700;color:#dc2626;margin-bottom:12px;display:none}
+
+/* ── SUCCESS ── */
+.success-wrap{max-width:480px;margin:40px auto;padding:20px}
+.success-card{background:#fff;border-radius:20px;padding:32px 24px;text-align:center;box-shadow:0 8px 40px rgba(30,58,138,.15)}
+.success-ico{font-size:56px;display:block;margin-bottom:16px}
+.success-title{font-size:20px;font-weight:900;color:var(--tl3);margin-bottom:8px}
+.success-sub{font-size:13px;color:var(--g3);line-height:1.7}
+
+/* ── MISC ── */
+.req{color:var(--red);font-size:12px;margin-left:2px}
+.spin{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.req-footer{text-align:center;color:var(--g4);font-size:11px;font-weight:600;padding:16px}
+
+@media(max-width:480px){
+  .svc-grid{grid-template-columns:repeat(2,1fr)}
+  .r3{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="req-hdr">
+  <span class="req-hdr-ico">🧹</span>
+  <div class="req-hdr-biz" id="bizName">Cleaning Service</div>
+  <div class="req-hdr-sub">Request a cleaning appointment</div>
+</div>
+
+<!-- BODY -->
+<div class="req-body" id="mainBody">
+
+  <!-- STEP INDICATOR -->
+  <div class="req-steps" id="reqStepsBar">
+    <div class="req-step"><div class="req-step-num on" id="rsn1">1</div><div class="req-step-lbl on" id="rsl1">Info</div></div>
+    <div class="req-step-line" id="rsline1"></div>
+    <div class="req-step"><div class="req-step-num" id="rsn2">2</div><div class="req-step-lbl" id="rsl2">Service</div></div>
+    <div class="req-step-line" id="rsline2"></div>
+    <div class="req-step"><div class="req-step-num" id="rsn3">3</div><div class="req-step-lbl" id="rsl3">Property</div></div>
+    <div class="req-step-line" id="rsline3"></div>
+    <div class="req-step"><div class="req-step-num" id="rsn4">4</div><div class="req-step-lbl" id="rsl4">Extras</div></div>
+    <div class="req-step-line" id="rsline4"></div>
+    <div class="req-step"><div class="req-step-num" id="rsn5">5</div><div class="req-step-lbl" id="rsl5">Review</div></div>
+  </div>
+
+  <!-- STEP 1: YOUR INFORMATION -->
+  <div id="reqStep1">
+    <div style="margin-bottom:6px">
+      <div style="font-size:18px;font-weight:900;color:var(--g1)">Your Information</div>
+      <div style="font-size:12px;color:var(--g3);margin-top:2px">Tell us who you are</div>
+    </div>
+    <div class="how-card" style="margin-top:14px">
+      <div class="how-title">How it works</div>
+      <div class="how-step"><div class="how-num">1</div><div class="how-txt">Fill out the form and submit your request</div></div>
+      <div class="how-step"><div class="how-num">2</div><div class="how-txt">We'll review and send you a quote by email</div></div>
+      <div class="how-step"><div class="how-num">3</div><div class="how-txt">Confirm your appointment with one click</div></div>
+      <div class="how-step"><div class="how-num">4</div><div class="how-txt">Sit back and enjoy your clean space! ✨</div></div>
+    </div>
+    <div class="req-card">
+      <div class="req-card-title">👤 Your Information</div>
+      <div id="errMsg1" class="err-msg"></div>
+      <label class="lbl">Full Name <span class="req">*</span></label>
+      <input type="text" id="rName" class="inp" placeholder="Your full name" autocomplete="name">
+      <label class="lbl">Phone <span class="req">*</span></label>
+      <input type="tel" id="rPhone" class="inp" placeholder="(555) 000-0000" inputmode="tel" autocomplete="tel">
+      <label class="lbl">Email</label>
+      <input type="email" id="rEmail" class="inp" placeholder="your@email.com" autocomplete="email">
+      <label class="lbl">Address <span class="req">*</span></label>
+      <input type="text" id="rAddress" class="inp" placeholder="Street address">
+      <label class="lbl">Complement <span style="font-weight:400;color:var(--g4)">(optional)</span></label>
+      <input type="text" id="rComplement" class="inp" placeholder="Apt, Suite, Unit, Floor...">
+      <div class="r3">
+  <div class="grp"><label class="lbl">ZIP</label><input type="text" id="rZip" class="inp" placeholder="33101" inputmode="numeric" maxlength="10" onblur="zipAutoFill()" style="margin-bottom:0"></div>
+  <div class="grp"><label class="lbl">City</label><input type="text" id="rCity" class="inp" placeholder="City" style="margin-bottom:0"></div>
+  <div class="grp"><label class="lbl">State</label><input type="text" id="rState" class="inp" placeholder="CA" maxlength="2" style="text-transform:uppercase;margin-bottom:0"></div>
+</div>
+      <label class="lbl" style="margin-top:12px">Access Instructions <span style="font-weight:400;color:var(--g4)">(optional)</span></label>
+      <input type="text" id="rAccess" class="inp" placeholder="e.g. key under mat, gate code 1234" style="margin-bottom:0">
+    </div>
+    <button class="btn btn-teal" onclick="reqNext(1)">Next →</button>
+  </div>
+
+  <!-- STEP 2: SERVICE -->
+  <div id="reqStep2" style="display:none">
+    <div style="margin-bottom:14px">
+      <div style="font-size:18px;font-weight:900;color:var(--g1)">Select Service</div>
+      <div style="font-size:12px;color:var(--g3);margin-top:2px">What type of cleaning do you need?</div>
+    </div>
+    <div class="req-card">
+      <div class="req-card-title">🧹 Service Type <span class="req">*</span></div>
+      <div class="svc-grid" id="svcGrid"></div>
+      <div class="req-card-title" style="margin-top:14px">🏠 Property Type <span class="req">*</span></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="propTypeGrid">
+        <div class="svc-card" id="pt_house" onclick="selPropType('house',this)" style="padding:8px 4px"><div class="svc-ico">🏠</div><div class="svc-name">House</div></div>
+        <div class="svc-card" id="pt_apt" onclick="selPropType('apt',this)" style="padding:8px 4px"><div class="svc-ico">🏢</div><div class="svc-name">Apartment</div></div>
+        <div class="svc-card" id="pt_office" onclick="selPropType('office',this)" style="padding:8px 4px"><div class="svc-ico">🏣</div><div class="svc-name">Office</div></div>
+      </div>
+      <div class="req-card-title" style="margin-top:14px">✨ Cleaning Type <span class="req">*</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="cleanTypeGrid">
+        <div class="svc-card" id="ct_standard" onclick="selCleanType('standard',this)" style="padding:8px 4px"><div class="svc-ico">🧹</div><div class="svc-name">Standard</div></div>
+        <div class="svc-card" id="ct_deep" onclick="selCleanType('deep',this)" style="padding:8px 4px"><div class="svc-ico">✨</div><div class="svc-name">Deep Clean</div><div id="deepPriceHint" style="display:none"></div></div>
+      </div>
+      <div id="errMsg2" class="err-msg" style="margin-top:12px"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gray" onclick="reqGoStep(1)">← Back</button>
+      <button class="btn btn-teal" onclick="reqNext(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: PROPERTY DETAILS -->
+  <div id="reqStep3" style="display:none">
+    <div style="margin-bottom:14px">
+      <div style="font-size:18px;font-weight:900;color:var(--g1)">Property Details</div>
+      <div style="font-size:12px;color:var(--g3);margin-top:2px">Where is the cleaning located?</div>
+    </div>
+    <div class="step3-wrap">
+      <!-- LEFT: room cards -->
+      <div>
+        <div class="req-card">
+          <div class="req-card-title">🏠 Property Details</div>
+          <div id="errMsg3" class="err-msg"></div>
+
+          <!-- Studio -->
+          <div class="room-card" id="roomCardStudio" onclick="showRoomDetail('studio')">
+            <div class="room-card-ico">🏠</div>
+            <div class="room-card-info">
+              <div class="room-card-name">Studio / Base</div>
+              <div class="room-card-price" id="studioPriceLbl">See what's included</div>
+              <div class="room-card-hint">tap to see details</div>
+            </div>
+            <div class="room-card-ctrl" onclick="event.stopPropagation()">
+              <button id="studioBtn" onclick="toggleStudio()" style="padding:5px 14px;border-radius:8px;border:1.5px solid var(--g5);background:var(--w);font-size:12px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--g2);transition:all .15s">Add</button>
+            </div>
+          </div>
+
+          <!-- Bedroom -->
+          <div class="room-card" id="roomCardBed" onclick="showRoomDetail('bedroom')">
+            <div class="room-card-ico">🛏</div>
+            <div class="room-card-info">
+              <div class="room-card-name">Bedroom</div>
+              <div class="room-card-price" id="bedPriceLbl">Per bedroom</div>
+              <div class="room-card-hint">tap to see details</div>
+            </div>
+            <div class="room-card-ctrl" onclick="event.stopPropagation()">
+              <button class="counter-btn" onclick="changeCount('beds',-1)">−</button>
+              <span class="counter-val" id="bedsVal">0</span>
+              <button class="counter-btn" onclick="changeCount('beds',1)">+</button>
+            </div>
+          </div>
+
+          <!-- Bathroom -->
+          <div class="room-card" id="roomCardBath" onclick="showRoomDetail('bathroom')">
+            <div class="room-card-ico">🚿</div>
+            <div class="room-card-info">
+              <div class="room-card-name">Bathroom</div>
+              <div class="room-card-price" id="bathPriceLbl">Per bathroom</div>
+              <div class="room-card-hint">tap to see details</div>
+            </div>
+            <div class="room-card-ctrl" onclick="event.stopPropagation()">
+              <button class="counter-btn" onclick="changeCount('baths',-1)">−</button>
+              <span class="counter-val" id="bathsVal">0</span>
+              <button class="counter-btn" onclick="changeCount('baths',1)">+</button>
+            </div>
+          </div>
+
+          <!-- Sqft -->
+          <div style="margin-top:4px;padding-top:12px;border-top:1px solid var(--g5)">
+            <label class="lbl">📐 Sq Footage <span style="font-weight:400;color:var(--g4)">(optional)</span></label>
+            <input type="number" id="sqftVal" class="inp" placeholder="e.g. 1200" inputmode="numeric" style="margin-bottom:8px">
+          </div>
+
+          <!-- Pets -->
+          <div class="toggle-row">
+            <span style="font-size:12px;font-weight:700;color:var(--g2)">🐾 Pets at home?</span>
+            <div class="toggle-track" id="petsToggle" onclick="togglePets()"><div class="toggle-thumb"></div></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-gray" onclick="reqGoStep(2)">← Back</button>
+          <button class="btn btn-teal" onclick="reqNext(3)">Next →</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: detail panel (desktop only) -->
+      <div class="room-detail-panel" id="roomDetailPanel">
+        <div class="room-detail-empty" id="roomDetailEmpty">
+          <div class="room-detail-empty-ico">👆</div>
+          <div class="room-detail-empty-txt">Tap a room card to see what's included</div>
+        </div>
+        <div id="roomDetailContent" style="display:none">
+          <div class="room-detail-header">
+            <div class="room-detail-ico" id="rdIco">🏠</div>
+            <div class="room-detail-name" id="rdName">Studio / Base</div>
+            <div class="room-detail-price" id="rdPrice"></div>
+          </div>
+          <div class="room-detail-body">
+            <div class="room-detail-section">
+              <div class="room-detail-section-title">Description</div>
+              <div id="rdDesc" style="font-size:13px;color:var(--g2)"></div>
+            </div>
+            <div class="room-detail-includes">
+              <div class="room-detail-includes-title">What's Included</div>
+              <div id="rdIncludes"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: EXTRAS -->
+  <div id="reqStep4" style="display:none">
+    <div style="margin-bottom:14px">
+      <div style="font-size:18px;font-weight:900;color:var(--g1)">Customize Your Clean</div>
+      <div style="font-size:12px;color:var(--g3);margin-top:2px">Add any extra services you'd like</div>
+    </div>
+    <div class="req-card" id="extrasCard">
+      <div class="req-card-title">➕ Extra Services</div>
+      <div style="font-size:11px;color:var(--g3);margin-bottom:12px;font-weight:600">Select any additional services you'd like.</div>
+      <div class="ext-grid" id="extGrid"></div>
+      <div id="noExtrasMsg" style="font-size:12px;color:var(--g4);text-align:center;padding:20px 0;display:none">No extra services configured.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gray" onclick="reqGoStep(3)">← Back</button>
+      <button class="btn btn-teal" onclick="reqNext(4)">Next →</button>
+    </div>
+  </div>
+
+  <!-- STEP 5: SCHEDULE & REVIEW -->
+  <div id="reqStep5" style="display:none">
+    <div style="margin-bottom:14px">
+      <div style="font-size:18px;font-weight:900;color:var(--g1)">Review & Submit</div>
+      <div style="font-size:12px;color:var(--g3);margin-top:2px">Please review your details</div>
+    </div>
+    <div class="req-card">
+      <div class="req-card-title">📅 Preferred Date & Time</div>
+      <div class="r2">
+        <div class="grp"><label class="lbl">Date</label><input type="date" id="rDate" class="inp" style="margin-bottom:0"></div>
+        <div class="grp"><label class="lbl">Time</label><input type="time" id="rTime" class="inp" style="margin-bottom:0"></div>
+      </div>
+      <div style="font-size:10px;color:var(--g3);margin-top:8px;font-weight:600">⚠️ Preferred time — subject to availability.</div>
+    </div>
+    <div class="req-card">
+      <div class="req-card-title">📝 Additional Notes</div>
+      <textarea id="rNotes" class="inp" placeholder="Any special requests..." rows="3" style="resize:vertical;font-family:'Nunito',sans-serif;margin-bottom:0"></textarea>
+    </div>
+    <div class="req-summary">
+      <div class="req-summary-title">📋 Request Summary</div>
+      <div id="summaryRows"><div style="font-size:12px;opacity:.6;text-align:center;padding:8px 0">Loading summary...</div></div>
+      <div class="sum-total" id="sumTotalRow" style="display:none">
+        <div><div class="sum-total-lbl">Estimated Total</div><div class="sum-range" id="sumRange"></div></div>
+        <div class="sum-total-val" id="sumTotalVal">$0</div>
+      </div>
+    </div>
+    <div id="errMsg5" class="err-msg"></div>
+    <div class="btn-row" style="margin-bottom:10px">
+      <button class="btn btn-gray" onclick="reqGoStep(4)">← Back</button>
+      <button class="btn btn-teal" id="submitBtn" onclick="submitRequest()"><span>Send Request</span> <span>→</span></button>
+    </div>
+  </div>
+
+  <div class="req-footer">Powered by BGrowth Club</div>
+</div>
+
+<script>
+var _ownerToken = '<?= ownerToken ?>';
+var _bizName    = '<?= bizName ?>';
+var _selSvc=null,_extras=[],_counts={beds:0,baths:0},_pets=false,_propType='',_cleanType='',_studioSelected=false,_settings=null,_curStep=1;
+var _activeRoomDetail=null;
+
+var SVC_TYPES=[
+  {id:'house',name:'House Cleaning',ico:'🏠'},
+  {id:'commercial',name:'Commercial',ico:'🏢'},
+  {id:'moveinout',name:'Move In/Out',ico:'🚛'},
+  {id:'construction',name:'Post-Construction',ico:'🏗️'},
+  {id:'upholstery',name:'Upholstery',ico:'🛋️'},
+  {id:'carpet',name:'Carpet Cleaning',ico:'🧶'}
+];
+
+var ROOM_INFO={
+  studio:{ico:'🏠',name:'Studio / Base',desc:'Complete cleaning of all common areas including kitchen.',includes:'Living room, Entrance & hallway, Balcony / porch, Common areas, Kitchen'},
+  bedroom:{ico:'🛏',name:'Bedroom',desc:'Full bedroom cleaning including closet and windows.',includes:'Full bedroom, Closet exterior, Windows, Dusting all surfaces, Vacuuming / mopping'},
+  bathroom:{ico:'🚿',name:'Bathroom',desc:'Complete bathroom cleaning and sanitization.',includes:'Toilet cleaning & sanitizing, Shower / bathtub, Sink & mirrors, Floor mopping, Cabinet exterior'}
+};
+
+(function(){
+  if(_bizName&&_bizName!=='<?= bizName ?>') document.getElementById('bizName').textContent=_bizName;
+  var today=new Date().toISOString().slice(0,10);
+  document.getElementById('rDate').min=today;
+  document.getElementById('rDate').value=today;
+  if(typeof google!=='undefined'&&_ownerToken&&_ownerToken.indexOf('@')>-1){
+    google.script.run
+      .withSuccessHandler(function(s){
+        _settings=s;
+        renderSvcGrid();renderExtras();renderRoomPrices();
+        var hint=document.getElementById('deepPriceHint');
+        if(hint&&s.deepClean&&s.deepClean.value>0) hint.textContent='+'+s.deepClean.value+(s.deepClean.type==='percent'?'%':' flat');
+      })
+      .withFailureHandler(function(){renderSvcGrid();})
+      .cleaning_getPublicSettings(_ownerToken);
+  } else { renderSvcGrid(); }
+})();
+
+function renderRoomPrices(){
+  var rp=(_settings&&_settings.roomPricing)||{};
+  if(rp.studio)  document.getElementById('studioPriceLbl').textContent='$'+parseFloat(rp.studio.price||rp.studio).toFixed(0)+' flat';
+  if(rp.bedroom) document.getElementById('bedPriceLbl').textContent='$'+parseFloat(rp.bedroom.price||rp.bedroom).toFixed(0)+' each';
+  if(rp.bathroom)document.getElementById('bathPriceLbl').textContent='$'+parseFloat(rp.bathroom.price||rp.bathroom).toFixed(0)+' each';
+}
+
+function renderSvcGrid(){
+  var activeTypes=SVC_TYPES;
+  if(_settings&&_settings.activeServices&&_settings.activeServices.length){
+    activeTypes=SVC_TYPES.filter(function(t){return _settings.activeServices.indexOf(t.id)>-1;});
+    if(!activeTypes.length)activeTypes=SVC_TYPES;
+  }
+  document.getElementById('svcGrid').innerHTML=activeTypes.map(function(t){
+    return'<div class="svc-card" data-id="'+t.id+'" onclick="selSvc(\''+t.id+'\',this)"><div class="svc-ico">'+t.ico+'</div><div class="svc-name">'+t.name+'</div></div>';
+  }).join('');
+}
+
+function renderExtras(){
+  var fees=(_settings&&_settings.extraFees)||[];
+  var grid=document.getElementById('extGrid');var noMsg=document.getElementById('noExtrasMsg');
+  if(!fees.length){grid.style.display='none';if(noMsg)noMsg.style.display='block';return;}
+  if(noMsg)noMsg.style.display='none';
+  grid.style.display='grid';
+  grid.innerHTML=fees.map(function(f){
+    var price=parseFloat(f.price)||0;
+    return'<div class="ext-card" id="extc_'+f.id+'" data-id="'+f.id+'" data-price="'+price+'" onclick="showFeeDetail(\''+f.id+'\')">'+
+      '<div class="ext-ico">'+f.ico+'</div><div class="ext-name">'+f.name+'</div>'+
+      (price>0?'<div class="ext-price">+$'+price.toFixed(0)+'</div>':'')+
+    '</div>';
+  }).join('');
+}
+
+// ZIP auto-fill
+function zipAutoFill(){
+  var zip=document.getElementById('rZip').value.trim();
+  if(!zip||zip.length<5) return;
+  fetch('https://api.zippopotam.us/us/'+zip)
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.places||!d.places[0]) return;
+      var place=d.places[0];
+      var cityEl=document.getElementById('rCity');
+      var stateEl=document.getElementById('rState');
+      if(cityEl&&!cityEl.value) cityEl.value=place['place name']||'';
+      if(stateEl&&!stateEl.value) stateEl.value=place['state abbreviation']||'';
+    })
+    .catch(function(){});
+}
+
+// Step navigation
+function reqGoStep(n){
+  for(var i=1;i<=5;i++){
+    var s=document.getElementById('reqStep'+i);if(s)s.style.display=i===n?'block':'none';
+    var sn=document.getElementById('rsn'+i);var sl=document.getElementById('rsl'+i);
+    if(sn){sn.className='req-step-num'+(i===n?' on':i<n?' done':'');sn.textContent=i<n?'✓':i;}
+    if(sl)sl.className='req-step-lbl'+(i===n?' on':i<n?' done':'');
+    if(i<5){var line=document.getElementById('rsline'+i);if(line)line.className='req-step-line'+(i<n?' done':'');}
+  }
+  _curStep=n;
+  if(n===5)updateSummary();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function reqNext(from){
+  if(from===1){
+    var el=document.getElementById('errMsg1');
+    if(!document.getElementById('rName').value.trim()){el.textContent='Please enter your full name.';el.style.display='block';return;}
+    if(!document.getElementById('rPhone').value.trim()){el.textContent='Please enter your phone number.';el.style.display='block';return;}
+    if(!document.getElementById('rAddress').value.trim()){el.textContent='Please enter your address.';el.style.display='block';return;}
+    el.style.display='none';reqGoStep(2);
+  } else if(from===2){
+    var el2=document.getElementById('errMsg2');
+    if(!_selSvc){el2.textContent='Please select a service type.';el2.style.display='block';return;}
+    if(!_propType){el2.textContent='Please select a property type.';el2.style.display='block';return;}
+    if(!_cleanType){el2.textContent='Please select a cleaning type.';el2.style.display='block';return;}
+    el2.style.display='none';reqGoStep(3);
+  } else if(from===3){reqGoStep(4);}
+  else if(from===4){reqGoStep(5);}
+}
+
+function selSvc(id,el){_selSvc=id;document.querySelectorAll('#svcGrid .svc-card').forEach(function(c){c.classList.remove('on');});el.classList.add('on');}
+function selPropType(type,el){_propType=type;document.querySelectorAll('#propTypeGrid .svc-card').forEach(function(c){c.classList.remove('on');});el.classList.add('on');}
+function selCleanType(type,el){
+  _cleanType=type;
+  document.querySelectorAll('[id^="ct_"]').forEach(function(c){c.classList.remove('on');});el.classList.add('on');
+  var hint=document.getElementById('deepPriceHint');
+  if(hint&&_settings&&_settings.deepClean&&_settings.deepClean.value>0) hint.textContent='+'+_settings.deepClean.value+(_settings.deepClean.type==='percent'?'%':' flat');
+}
+
+// Room detail — desktop panel or mobile modal
+function showRoomDetail(type){
+  var isDesktop=window.innerWidth>=768;
+  if(isDesktop){ showRoomPanel(type); }
+  else { showRoomModal(type); }
+}
+
+function showRoomPanel(type){
+  var info=ROOM_INFO[type];
+  var rp=(_settings&&_settings.roomPricing)||{};
+  var rpRoom=rp[type]||{};
+  var price=parseFloat(rpRoom.price||rpRoom)||0;
+  var priceStr=price?'$'+price.toFixed(0)+(type==='studio'?' flat':' each'):'';
+  // Get custom desc/includes from settings if available
+  var desc=rpRoom.description||info.desc;
+  var includesStr=rpRoom.includes||info.includes;
+  var includes=includesStr.split(',').map(function(i){return i.trim();}).filter(Boolean);
+
+  // Update active state on cards
+  document.querySelectorAll('.room-card').forEach(function(c){c.classList.remove('active-detail');});
+  var cardId={studio:'roomCardStudio',bedroom:'roomCardBed',bathroom:'roomCardBath'}[type];
+  if(cardId) document.getElementById(cardId).classList.add('active-detail');
+  _activeRoomDetail=type;
+
+  document.getElementById('roomDetailEmpty').style.display='none';
+  document.getElementById('roomDetailContent').style.display='block';
+  document.getElementById('rdIco').textContent=info.ico;
+  document.getElementById('rdName').textContent=info.name;
+  document.getElementById('rdPrice').textContent=priceStr;
+  document.getElementById('rdDesc').textContent=desc;
+  document.getElementById('rdIncludes').innerHTML=includes.map(function(i){
+    return'<div class="room-detail-item"><span style="color:var(--green);font-weight:900">✓</span>'+i+'</div>';
+  }).join('');
+}
+
+function showRoomModal(type){
+  var info=ROOM_INFO[type];
+  var rp=(_settings&&_settings.roomPricing)||{};
+  var rpRoom=rp[type]||{};
+  var price=parseFloat(rpRoom.price||rpRoom)||0;
+  var priceStr=price?'$'+price.toFixed(0)+(type==='studio'?' flat':' each'):'';
+  var desc=rpRoom.description||info.desc;
+  var includesStr=rpRoom.includes||info.includes;
+  var includes=includesStr.split(',').map(function(i){return i.trim();}).filter(Boolean);
+
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:20px;padding:0;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.15);overflow:hidden">'+
+      '<div style="background:var(--tl5);padding:24px;text-align:center;border-bottom:1px solid var(--tl4)">'+
+        '<div style="font-size:44px;margin-bottom:8px">'+info.ico+'</div>'+
+        '<div style="font-size:17px;font-weight:900;color:var(--g1)">'+info.name+'</div>'+
+        (priceStr?'<div style="font-size:16px;font-weight:900;color:var(--tl);margin-top:4px">'+priceStr+'</div>':'')+
+      '</div>'+
+      '<div style="padding:20px">'+
+        '<div style="background:var(--g6);border-radius:10px;padding:12px;margin-bottom:12px">'+
+          '<div style="font-size:10px;font-weight:800;color:var(--g3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Description</div>'+
+          '<div style="font-size:13px;color:var(--g2)">'+desc+'</div>'+
+        '</div>'+
+        '<div style="background:var(--tl5);border:1px solid var(--tl4);border-radius:10px;padding:12px;margin-bottom:16px">'+
+          '<div style="font-size:10px;font-weight:800;color:var(--tl2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">What\'s Included</div>'+
+          includes.map(function(i){return'<div style="font-size:12px;color:var(--g1);display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="color:var(--green);font-weight:900">✓</span>'+i+'</div>';}).join('')+
+        '</div>'+
+        '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="width:100%;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--tl),var(--tl2));color:#fff;font-size:14px;font-weight:900;font-family:\'Nunito\',sans-serif;cursor:pointer">Got it ✓</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click',function(e){if(e.target===modal)modal.remove();});
+}
+
+function toggleStudio(){
+  _studioSelected=!_studioSelected;
+  var btn=document.getElementById('studioBtn');var card=document.getElementById('roomCardStudio');
+  btn.textContent=_studioSelected?'✓ Added':'Add';
+  btn.style.background=_studioSelected?'var(--tl5)':'var(--w)';
+  btn.style.color=_studioSelected?'var(--tl2)':'var(--g2)';
+  btn.style.borderColor=_studioSelected?'var(--tl)':'var(--g5)';
+  card.classList.toggle('on',_studioSelected);
+}
+
+function cpRoomCount(key, delta){
+  _cp.roomCounts[key] = Math.max(0, (_cp.roomCounts[key]||0) + delta);
+  var elId = key==='beds' ? 'cpRoomBedsVal' : 'cpRoomBathsVal';
+  var cardId = key==='beds' ? 'cpRoomBedCard' : 'cpRoomBathCard';
+  var el = document.getElementById(elId);
+  var card = document.getElementById(cardId);
+  if(el) el.textContent = _cp.roomCounts[key];
+  if(card) card.style.borderColor = _cp.roomCounts[key] > 0 ? 'var(--tl)' : 'var(--g5)';
+  cpCalc();
+}
+
+function cpSaveClient(){
+  var name=cpV('cpCName').trim();
+  if(!name){toast('Enter client name','err');return;}
+  var data={
+    id:cpV('cpCId'),
+    name:name,
+    phone:cpV('cpCPhone'),
+    address:cpV('cpCAddr'),
+    city:cpV('cpCCity'),
+    state:cpV('cpCState').toUpperCase(),
+    zipcode:cpV('cpCZip'),
+    email:cpV('cpCEmail'),
+    prefs:cpV('cpCPrefs')
+  };
+    google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok){toast(data.id?'Client updated':'Client added');cpHideCF();cpLoadClients();}
+    else toast((r&&r.message)||'Error','err');
+  }).cleaning_saveClient(_cp.user.email,data);
+}
+
+function cpClientSearch(query, fieldId){
+  var dropdown = document.getElementById(fieldId+'Dropdown');
+  var q = (query || '').trim();
+  
+  if(q.length < 2){ 
+    if(dropdown) dropdown.classList.remove('show'); 
+    return; 
+  }
+
+  // Chamada ao servidor de forma assíncrona (não trava a tela)
+  google.script.run.withSuccessHandler(function(filtered) {
+    if(!dropdown || filtered.length === 0){ 
+      if(dropdown) dropdown.classList.remove('show');
+      return; 
+    }
+    
+    dropdown.innerHTML = filtered.map(function(c){
+      var initials = c.name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
+      var meta = [c.phone, [c.city, c.state].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+      
+      return '<div class="cp-client-option" onclick="cpClientSelect(\''+fieldId+'\',\''+encodeURIComponent(JSON.stringify(c))+'\')">'+
+        '<div class="cp-client-av2">'+initials+'</div>'+
+        '<div class="cp-client-info">'+
+          '<div class="cp-client-name2">'+c.name+'</div>'+
+          (meta ? '<div class="cp-client-meta2">'+meta+'</div>' : '')+
+        '</div>'+
+      '</div>';
+    }).join('') + '<div class="cp-client-add" onclick="cpClientAddNew(\''+fieldId+'\')">➕ Add new client</div>';
+    
+    dropdown.classList.add('show');
+  }).cleaning_searchClients(_cp.user.email, q);
+}
+
+function cpClientSelect(fieldId, encodedClient){
+  try{
+    var c = JSON.parse(decodeURIComponent(encodedClient));
+    var hidden = document.getElementById(fieldId);
+    var input = document.getElementById(fieldId+'SearchInput');
+    var clearBtn = document.getElementById(fieldId+'SearchClear');
+    var dropdown = document.getElementById(fieldId+'Dropdown');
+    if(hidden) hidden.value = c.id||c.name;
+    if(input){ input.value = c.name; input.style.borderColor='var(--tl)'; }
+    if(clearBtn) clearBtn.style.display='flex';
+    if(dropdown) dropdown.classList.remove('show');
+    // clientId separado para New Job
+    var cidEl = document.getElementById('cpClientId');
+    if(cidEl) cidEl.value = c.id||'';
+    // Checa repeat no New Job
+    if(fieldId==='cpClient') cpCheckRepeat();
+  }catch(e){}
+}
+
+function cpClientClear(fieldId){
+  var hidden = document.getElementById(fieldId);
+  var input = document.getElementById(fieldId+'SearchInput');
+  var clearBtn = document.getElementById(fieldId+'SearchClear');
+  var dropdown = document.getElementById(fieldId+'Dropdown');
+  if(hidden) hidden.value='';
+  if(input){ input.value=''; input.style.borderColor='var(--g5)'; input.focus(); }
+  if(clearBtn) clearBtn.style.display='none';
+  if(dropdown) dropdown.classList.remove('show');
+  var cidEl = document.getElementById('cpClientId');
+  if(cidEl) cidEl.value='';
+  cpClientSearch('', fieldId);
+}
+
+function cpClientAddNew(fieldId){
+  var dropdown = document.getElementById(fieldId+'Dropdown');
+  if(dropdown) dropdown.classList.remove('show');
+  if(fieldId==='cpClient'){
+    cpGoTab(5, document.getElementById('cpn5'));
+    cpShowCF();
+  } else {
+    cpGoTab(5, document.getElementById('cpn5'));
+    cpShowCF();
+  }
+}
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', function(e){
+  document.querySelectorAll('.cp-client-dropdown.show').forEach(function(dd){
+    if(!dd.closest('.cp-client-search').contains(e.target)) dd.classList.remove('show');
+  });
+});
+
+function cpCheckRepeat(){var val=cpV('cpClient');var c=_cp.clients.find(function(x){return (x.id&&x.id===val)||x.name===val;});var el=document.getElementById('cpRepeatAlert');if(c&&c.lastJob){el.style.display='block';el.innerHTML='🔁 Repeat client — last job: <b>'+c.lastJob+'</b>'+(c.prefs?' &nbsp;ℹ️ '+c.prefs:'');}else el.style.display='none';}
+
+function cpZipLookupClient(){
+  var zip=cpV('cpCZip').trim();
+  if(zip.length<5)return;
+  google.script.run.withSuccessHandler(function(r){
+    if(!r||!r.ok)return;
+    cpSetV('cpCCity',r.city||'');
+    cpSetV('cpCState',r.state||'');
+    toast('City/State preenchido ✓');
+  }).cleaning_getZipLatLng(zip);
+}
+
+function cpPrintClientChecklist(clientName){
+  var svc = _selSvc||'house';
+  var link = cpGetPrintChecklistLink(clientName, svc);
+  window.open(link, '_blank');
+}
+
+function cpGetPrintChecklistLink(clientName, svc){
+  return _appUrl + '?page=print_checklist&client=' + encodeURIComponent(clientName) + '&svc=' + encodeURIComponent(svc) + '&user=' + encodeURIComponent(_cp.user.email);
+}
+
+function cpShowCF(){cpGoTab(5,document.getElementById('cpn5'));document.getElementById('cpCForm').style.display='block';document.getElementById('cpCFormTitle').textContent='👤 New Client';cpSetV('cpCId','');['cpCName','cpCPhone','cpCAddr','cpCCity','cpCState','cpCZip','cpCEmail','cpCPrefs'].forEach(function(id){cpSetV(id,'');});}
+function cpHideCF(){document.getElementById('cpCForm').style.display='none';}
+function cpEditClient(c){document.getElementById('cpCForm').style.display='block';document.getElementById('cpCFormTitle').textContent='✏️ Edit Client';cpSetV('cpCId',c.id||'');cpSetV('cpCName',c.name||'');cpSetV('cpCPhone',c.phone||'');cpSetV('cpCAddr',c.address||'');cpSetV('cpCCity',c.city||'');cpSetV('cpCState',c.state||'');cpSetV('cpCZip',c.zipcode||'');cpSetV('cpCEmail',c.email||'');cpSetV('cpCPrefs',c.prefs||'');}
+
+function toggleFeeFromModal(id,btn){
+  var el=document.getElementById('extc_'+id);if(!el)return;
+  var fees=(_settings&&_settings.extraFees)||[];
+  var f=fees.find(function(x){return x.id===id;});
+  var isOn=el.classList.contains('on');
+  var qty=parseInt((document.getElementById('feeQtyVal')||{}).textContent)||1;
+  var price=parseFloat(el.getAttribute('data-price'))||0;
+  if(isOn){el.classList.remove('on');var idx=_extras.findIndex(function(e){return e.id===id;});if(idx>-1)_extras.splice(idx,1);}
+  else{el.classList.add('on');_extras.push({id:id,name:f?f.name:id,ico:f?f.ico:'',price:price*qty,qty:qty});}
+  var badge=el.querySelector('.fee-qty-badge');
+  if(el.classList.contains('on')&&qty>1){if(!badge){badge=document.createElement('div');badge.className='fee-qty-badge';badge.style.cssText='position:absolute;top:6px;right:6px;background:var(--tl);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;border:1.5px solid #fff';el.appendChild(badge);}badge.textContent=qty;}
+  else if(badge){badge.remove();}
+  btn.closest('[style*=fixed]').remove();
+}
+
+</script>
+</body>
+</html>
