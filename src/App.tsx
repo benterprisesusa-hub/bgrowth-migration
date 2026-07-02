@@ -46,7 +46,7 @@ const INITIAL_TRIPS: MileageTrip[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('admin-console');
+  const [activeTab, setActiveTab] = useState<string>('home');
   const [userPerspective, setUserPerspective] = useState<'admin' | 'owner' | 'staff' | 'client'>('admin');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState('');
