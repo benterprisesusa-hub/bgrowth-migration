@@ -250,11 +250,7 @@ if (!isAuthenticated) {
 
         {activeTab === 'home' && (
           <AppHub 
-            settings={settings}
-            requests={requests}
-            offers={offers}
-            members={members}
-            apps={apps}
+            userEmail={userEmail}
             setActiveTab={setActiveTab}
           />
         )}
