@@ -16,6 +16,7 @@ import DeliveryTracker from './components/DeliveryTracker';
 import MileageTracker from './components/MileageTracker';
 import AdminConsole from './components/AdminConsole';
 import CleaningSchedule from './components/CleaningSchedule';
+import Login from './components/Login';
 
 import { 
   INITIAL_SETTINGS, 
@@ -47,7 +48,9 @@ const INITIAL_TRIPS: MileageTrip[] = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('admin-console');
   const [userPerspective, setUserPerspective] = useState<'admin' | 'owner' | 'staff' | 'client'>('admin');
-  
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+
   // App Reactive States
   const [settings, setSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [members, setMembers] = useState<TeamMember[]>(INITIAL_MEMBERS);
@@ -61,6 +64,19 @@ export default function App() {
   const [tripApps, setTripApps] = useState<string[]>(INITIAL_TRIP_APPS);
   
   const [preFillRequest, setPreFillRequest] = useState<BookingRequest | null>(null);
+useEffect(() => {
+    const stored = localStorage.getItem('bgrowth_email');
+    if (stored) { setUserEmail(stored); setIsAuthenticated(true); return; }
+    const handler = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'wix_login' && e.data.email) {
+        setUserEmail(e.data.email);
+        setIsAuthenticated(true);
+        localStorage.setItem('bgrowth_email', e.data.email);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   // Handlers
   const handlePreFillOffer = (req: BookingRequest) => {
@@ -188,6 +204,18 @@ export default function App() {
     setOffers(offers.map(o => o.id === jobId ? { ...o, ticked: tickedItems } : o));
   };
 
+if (!isAuthenticated) {
+    return (
+      <Login
+        onLoginSuccess={(email) => {
+          setUserEmail(email);
+          setIsAuthenticated(true);
+          localStorage.setItem('bgrowth_email', email);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex bg-slate-50 min-h-screen text-slate-700 font-sans">
       
@@ -231,9 +259,9 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'dashboard' && (
+{activeTab === 'dashboard' && (
           <CleaningDash 
-            userEmail="benterprisesusa@gmail.com"
+            userEmail={userEmail}
           />
         )}
 
