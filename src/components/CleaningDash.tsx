@@ -4,13 +4,15 @@ import { DollarSign, Clock, Plus, Users, FileText, Megaphone } from 'lucide-reac
 const GAS_URL = import.meta.env.VITE_GAS_URL || '';
 
 async function callGAS(action: string, params: any = {}) {
-  const response = await fetch(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action, ...params }),
-    redirect: 'follow',
+  const url = new URL(GAS_URL);
+  url.searchParams.set('page', 'api');
+  url.searchParams.set('action', action);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
   });
-  return response.json();
+  const response = await fetch(url.toString(), { redirect: 'follow' });
+  const text = await response.text();
+  return JSON.parse(text);
 }
 
 interface DashProps {
