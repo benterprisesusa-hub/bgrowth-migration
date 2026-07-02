@@ -6,8 +6,9 @@ const GAS_URL = import.meta.env.VITE_GAS_URL || '';
 async function callGAS(action: string, params: any = {}) {
   const response = await fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ action, ...params }),
+    redirect: 'follow',
   });
   return response.json();
 }
