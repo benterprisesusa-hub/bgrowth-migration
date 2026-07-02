@@ -139,17 +139,28 @@ interface AdminConsoleProps {
   setActiveTab: (tab: string) => void;
 }
 
-export default function AdminConsole({ settings, onUpdateGlobalModules, setActiveTab }: AdminConsoleProps) {
-  // Main Navigation within Admin Panel
-  // Value: 'overview' | 'users' | 'cleaning' | 'mileage-delivery' | 'settings'
-  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'cleaning' | 'mileage-delivery' | 'settings'>('overview');
+export default function AdminConsole({ settings, onUpdateGlobalModules, setActiveTab, activeTab: externalTab }: AdminConsoleProps & { activeTab?: string }) {
+  const tabMap: Record<string, 'overview' | 'users' | 'cleaning' | 'mileage-delivery' | 'settings'> = {
+    'admin-overview': 'overview',
+    'admin-users': 'users',
+    'admin-cleaning': 'cleaning',
+    'admin-mileage': 'mileage-delivery',
+    'admin-settings': 'settings',
+    'admin-console': 'overview',
+  };
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'cleaning' | 'mileage-delivery' | 'settings'>(
+    externalTab ? (tabMap[externalTab] || 'overview') : 'overview'
+  );
+
+  React.useEffect(() => {
+    if (externalTab && tabMap[externalTab]) setAdminTab(tabMap[externalTab]);
+  }, [externalTab]);
 
   // React State for all legacy screens
   const [users, setUsers] = useState<AdminUser[]>(INITIAL_ADMIN_USERS);
   const [categories, setCategories] = useState<GlobalCategory[]>(INITIAL_CATEGORIES);
   const [checklists, setChecklists] = useState<ChecklistItem[]>(INITIAL_CHECKLISTS);
-  const [extraFees, setExtraFees] = useState<ExtraFee[]>(INITIAL_EXTRA_FEES);
-  const [services, setServices] = useState<GlobalServiceType[]>(INITIAL_SERVICES);
+  const [extraFees, setExtraFees] = useState<ExtraFee[]>(INITIAL_EXTRA_FEES);  const [services, setServices] = useState<GlobalServiceType[]>(INITIAL_SERVICES);
 
   // Users Tab Add User State
   const [newEmail, setNewEmail] = useState('');
@@ -374,123 +385,12 @@ export default function AdminConsole({ settings, onUpdateGlobalModules, setActiv
   });
 
   return (
-    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans flex flex-col md:flex-row rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans">
       
       {/* LEFT ADMIN SIDEBAR - Replicating exactly the design from the screenshots */}
-      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
-        
-        {/* Admin Header Branding */}
-        <div className="p-5 border-b border-slate-800 bg-slate-950 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center font-black text-white text-lg shadow-lg">
-            ⚡
-          </div>
-          <div>
-            <h3 className="font-extrabold text-white text-sm leading-tight">BGrowth</h3>
-            <span className="text-[10px] text-sky-400 font-extrabold tracking-widest uppercase">Admin Panel</span>
-          </div>
-        </div>
-
-        {/* Admin Sidebar Menus */}
-        <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
-          
-          {/* Group 1: Platform */}
-          <div className="space-y-1">
-            <div className="px-3 mb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              Platform
-            </div>
-            <button
-              onClick={() => setAdminTab('overview')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${
-                adminTab === 'overview' 
-                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/15' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard size={15} />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => setAdminTab('users')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${
-                adminTab === 'users' 
-                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/15' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Users size={15} />
-              <span>Users</span>
-            </button>
-          </div>
-
-          {/* Group 2: Modules */}
-          <div className="space-y-1">
-            <div className="px-3 mb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              Modules
-            </div>
-            <button
-              onClick={() => {
-                setAdminTab('cleaning');
-                setCleaningSubTab('checklist-categories');
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${
-                adminTab === 'cleaning' 
-                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/15' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Brush size={15} />
-              <span>Cleaning</span>
-            </button>
-            <button
-              onClick={() => setAdminTab('mileage-delivery')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${
-                adminTab === 'mileage-delivery' 
-                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/15' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Car size={15} />
-              <span>Mileage & Delivery</span>
-            </button>
-          </div>
-
-          {/* Group 3: System */}
-          <div className="space-y-1">
-            <div className="px-3 mb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              System
-            </div>
-            <button
-              onClick={() => setAdminTab('settings')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition ${
-                adminTab === 'settings' 
-                  ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/15' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Settings size={15} />
-              <span>Settings</span>
-            </button>
-          </div>
-
-        </nav>
-
-        {/* Super Admin Profile at bottom */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-sky-600/20 text-sky-400 flex items-center justify-center border border-sky-500/30 font-black text-base">
-              A
-            </div>
-            <div>
-              <div className="text-xs font-extrabold text-white">Administrator</div>
-              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Super Admin</div>
-            </div>
-          </div>
-        </div>
-
-      </aside>
 
       {/* RIGHT SIDE MAIN PANEL - LIGHT BG */}
-      <section className="flex-1 bg-slate-50 p-6 md:p-8 overflow-y-auto space-y-6">
+      <section className="bg-slate-50 p-6 md:p-8 space-y-6">
 
         {/* Super Admin Header Row */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-200">

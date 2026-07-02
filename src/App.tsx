@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Navigation from './components/Navigation';
 import AppHub from './components/AppHub';
-import Dashboard from './components/Dashboard';
+import CleaningDash from './components/CleaningDash';
 import BookingRequestsManager from './components/BookingRequestsManager';
 import JobBoard from './components/JobBoard';
 import TeamPayroll from './components/TeamPayroll';
@@ -206,8 +206,9 @@ export default function App() {
 
       {/* Main Content Pane */}
       <main className="flex-1 p-8 max-w-6xl mx-auto overflow-y-auto">
-        {activeTab === 'admin-console' && (
+        {(activeTab === 'admin-console' || activeTab === 'admin-overview' || activeTab === 'admin-users' || activeTab === 'admin-cleaning' || activeTab === 'admin-mileage' || activeTab === 'admin-settings') && (
           <AdminConsole 
+            activeTab={activeTab}
             settings={settings}
             onUpdateGlobalModules={(updatedModules) => {
               setSettings(prev => ({
@@ -231,13 +232,8 @@ export default function App() {
         )}
 
         {activeTab === 'dashboard' && (
-          <Dashboard 
-            requests={requests}
-            offers={offers}
-            members={members}
-            settings={settings}
-            setActiveTab={setActiveTab}
-            onPreFillOffer={handlePreFillOffer}
+          <CleaningDash 
+            userEmail="benterprisesusa@gmail.com"
           />
         )}
 

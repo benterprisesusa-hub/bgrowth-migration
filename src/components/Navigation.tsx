@@ -49,10 +49,15 @@ export default function Navigation({
 }: NavigationProps) {
   
   const showAdmin = userPerspective === 'admin';
-  const showManagement = userPerspective === 'owner' || userPerspective === 'admin';
+  const showManagement = userPerspective === 'owner';
 
   const adminItems = showAdmin ? [
-    { id: 'admin-console', label: 'SaaS Admin Console', icon: ShieldAlert }
+    { id: 'admin-console', label: 'SaaS Admin Console', icon: ShieldAlert },
+    { id: 'admin-overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'admin-users', label: 'Users', icon: Users },
+    { id: 'admin-cleaning', label: 'Cleaning', icon: Briefcase },
+    { id: 'admin-mileage', label: 'Mileage & Delivery', icon: Car },
+    { id: 'admin-settings', label: 'Settings', icon: Settings },
   ] : [];
 
   const managementItems = (enabledModules.cleaning && showManagement) ? [
@@ -148,7 +153,7 @@ export default function Navigation({
         {/* Perspective Switcher */}
         <div className="space-y-1.5 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
           <label className="text-[9px] font-black uppercase text-slate-500 tracking-wider block px-1">
-            Perspectiva de Acesso:
+            Access Level:
           </label>
           <div className="grid grid-cols-2 gap-1">
             {/* Admin Role button */}
@@ -228,7 +233,7 @@ export default function Navigation({
           >
             <div className="flex items-center gap-2.5">
               <Compass size={16} className={activeTab === 'home' ? 'text-slate-950' : 'text-teal-400'} />
-              <span>Central de Apps</span>
+              <span>App Hub</span>
             </div>
             <span className="text-[9px] px-1.5 py-0.5 rounded-md font-black bg-slate-950/20">
               HUB
