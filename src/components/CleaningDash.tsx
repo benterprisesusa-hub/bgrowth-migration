@@ -88,7 +88,7 @@ export default function CleaningDash({ userEmail }: DashProps) {
   const week = data?.week || {};
   const month = data?.month || {};
   const todayJobs = (data?.todayJobs || []).filter((j: any) => j.status !== 'Canceled').sort((a: any, b: any) => a.time?.localeCompare(b.time));
-  const teamStatuses = data?.teamStatuses || [];
+  const teamStatuses = data?.teamStats || data?.members || [];
 
   const quickActions = [
     { label: 'Add Member', icon: <Users className="w-4 h-4" />, color: 'bg-[#1d6fa4] text-white hover:bg-[#155a85]' },
