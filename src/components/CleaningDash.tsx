@@ -88,7 +88,32 @@ export default function CleaningDash({ userEmail }: DashProps) {
   const week = data?.week || {};
   const month = data?.month || {};
   const todayJobs = (data?.todayJobs || []).filter((j: any) => j.status !== 'Canceled').sort((a: any, b: any) => a.time?.localeCompare(b.time));
-  const teamStatuses = data?.teamStats || data?.members || [];
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const teamStatuses = (data?.members || []).map((m: any) => {
+    const myJobs = todayJobs.filter((j: any) =>
+      j.assignedTo === m.email || j.userEmail === m.email
+    );
+    let status = 'Off';
+    let nextJob = null;
+    if (myJobs.length > 0) {
+      const allDone = myJobs.every((j: any) => j.status === 'Done');
+      const hasActive = myJobs.some((j: any) => {
+        const jStart = parseInt(j.time?.split(':')[0] || '0') * 60 + parseInt(j.time?.split(':')[1] || '0');
+        const jEnd = jStart + (parseFloat(j.duration) || 1) * 60;
+        return j.status !== 'Done' && nowMin >= jStart && nowMin <= jEnd;
+      });
+      const hasUpcoming = myJobs.some((j: any) => {
+        const jStart = parseInt(j.time?.split(':')[0] || '0') * 60 + parseInt(j.time?.split(':')[1] || '0');
+        return j.status !== 'Done' && jStart > nowMin && jStart - nowMin <= 60;
+      });
+      if (allDone) status = 'Done';
+      else if (hasActive) status = 'Working';
+      else if (hasUpcoming) status = 'On the way';
+      else status = 'Scheduled';
+      nextJob = myJobs.filter((j: any) => j.status !== 'Done').sort((a: any, b: any) => a.time?.localeCompare(b.time))[0] || null;
+    }
+    return { ...m, status, nextJob };
+  });
 
   const quickActions = [
     { label: 'Add Member', icon: <Users className="w-4 h-4" />, color: 'bg-[#1d6fa4] text-white hover:bg-[#155a85]' },
