@@ -89,7 +89,11 @@ export default function CleaningDash({ userEmail }: DashProps) {
   const month = data?.month || {};
   const todayJobs = (data?.todayJobs || []).filter((j: any) => j.status !== 'Canceled').sort((a: any, b: any) => a.time?.localeCompare(b.time));
   const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  const teamStatuses = (data?.members || []).map((m: any) => {
+  const allMembers = [
+    { email: userEmail, name: 'You (Owner)' },
+    ...(data?.members || [])
+  ];
+  const teamStatuses = allMembers.map((m: any) => {
     const myJobs = todayJobs.filter((j: any) =>
       j.assignedTo === m.email || j.userEmail === m.email
     );
